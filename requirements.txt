@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+openai
+chromadb
+google-api-python-client
+PyGithub

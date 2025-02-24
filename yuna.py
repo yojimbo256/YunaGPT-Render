@@ -13,16 +13,22 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
 GOOGLE_DOCS_CREDENTIALS = os.getenv("GOOGLE_DOCS_CREDENTIALS")
 
+# Ensure GOOGLE_DOCS_CREDENTIALS is properly set
+if not GOOGLE_DOCS_CREDENTIALS or GOOGLE_DOCS_CREDENTIALS.strip() == "":
+    raise ValueError("GOOGLE_DOCS_CREDENTIALS environment variable is missing or improperly formatted!")
+
+try:
+    creds_dict = json.loads(GOOGLE_DOCS_CREDENTIALS)
+    creds = Credentials.from_service_account_info(creds_dict)
+except json.JSONDecodeError:
+    raise ValueError("Failed to parse GOOGLE_DOCS_CREDENTIALS as JSON. Ensure it's stored correctly.")
+
 # Initialize OpenAI
 openai.api_key = OPENAI_API_KEY
 
 # Initialize ChromaDB for Persistent Memory
 chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
-
-# Load Google Docs Credentials from Render
-creds_dict = json.loads(GOOGLE_DOCS_CREDENTIALS)
-creds = Credentials.from_service_account_info(creds_dict)
 
 # Initialize Google Docs API
 docs_service = build("docs", "v1", credentials=creds)
@@ -34,7 +40,7 @@ def fetch_google_doc():
 
 # Initialize GitHub API Client
 g = Github(GITHUB_ACCESS_TOKEN)
-repo_name = "your_github_username/your_repo_name"  # Replace with your actual repo
+repo_name = "your_github_username/your_repo_name"  # Replace with your repo
 repo = g.get_repo(repo_name)
 
 def fetch_github_issues():

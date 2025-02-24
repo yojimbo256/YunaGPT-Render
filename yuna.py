@@ -4,24 +4,13 @@ from fastapi import FastAPI
 import openai
 import chromadb
 from chromadb.utils import embedding_functions
-from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from github import Github
 
 # Load API Keys from Render Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
-GOOGLE_DOCS_CREDENTIALS = os.getenv("GOOGLE_DOCS_CREDENTIALS")
-
-# Ensure GOOGLE_DOCS_CREDENTIALS is properly set
-if not GOOGLE_DOCS_CREDENTIALS or GOOGLE_DOCS_CREDENTIALS.strip() == "":
-    raise ValueError("GOOGLE_DOCS_CREDENTIALS environment variable is missing or improperly formatted!")
-
-try:
-    creds_dict = json.loads(GOOGLE_DOCS_CREDENTIALS)
-    creds = Credentials.from_service_account_info(creds_dict)
-except json.JSONDecodeError:
-    raise ValueError("Failed to parse GOOGLE_DOCS_CREDENTIALS as JSON. Ensure it's stored correctly.")
+GOOGLE_DOCS_API_KEY = os.getenv("GOOGLE_DOCS_API_KEY")
 
 # Initialize OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -30,13 +19,16 @@ openai.api_key = OPENAI_API_KEY
 chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
-# Initialize Google Docs API
-docs_service = build("docs", "v1", credentials=creds)
+# Initialize Google Docs API using API key
+docs_service = build("docs", "v1", developerKey=GOOGLE_DOCS_API_KEY)
 DOC_ID = "your_google_doc_id"  # Replace with your actual Google Doc ID
 
 def fetch_google_doc():
-    document = docs_service.documents().get(documentId=DOC_ID).execute()
-    return document.get("body").get("content")
+    try:
+        document = docs_service.documents().get(documentId=DOC_ID).execute()
+        return document.get("body").get("content")
+    except Exception as e:
+        return {"error": str(e)}
 
 # Initialize GitHub API Client
 g = Github(GITHUB_ACCESS_TOKEN)

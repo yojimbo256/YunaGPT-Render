@@ -7,7 +7,7 @@ from chromadb.utils import embedding_functions
 from github import Github
 import requests
 import dropbox
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Load API Keys from Render Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -22,50 +22,33 @@ openai.api_key = OPENAI_API_KEY
 chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
-# Corrected Dropbox file path based on API response
+# Corrected Dropbox file path
 DROPBOX_FOLDER_PATH = "/Apps/YunaGPT-Storage/yuna-docs/"
 
-# Fetch list of files from Dropbox
-def list_dropbox_files():
+# Fetch latest notes from Dropbox
+def fetch_latest_dropbox_notes():
+    """Fetches the latest text document from Dropbox."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
         files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
-        file_names = [file.name for file in files]
-        return {"files": file_names}
+        text_files = [file.name for file in files if file.name.endswith(".txt")]
+        if not text_files:
+            return {"error": "No text files found in Dropbox."}
+        
+        latest_file = sorted(text_files, reverse=True)[0]
+        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
+        return {"file": latest_file, "content": response.content.decode("utf-8")}
     except Exception as e:
         print(f"Dropbox API Error: {e}")
-        return {"error": "Could not retrieve file list."}
-
-# Store text into memory
-def remember_text(text):
-    """Stores text into memory with a timestamp."""
-    collection.add(
-        ids=[str(hash(text))],  # Generate unique ID
-        documents=[text],
-        metadatas=[{"timestamp": datetime.now().strftime("%Y-%m-%d")}]
-    )
-    return {"message": "Memory stored successfully."}
-
-# Retrieve stored memories
-def fast_recall_memory(query):
-    """Retrieves relevant memories with optimized search."""
-    results = collection.query(query_texts=[query], n_results=5)
-    return {"matching_memories": results.get("documents", [])}
+        return {"error": str(e)}
 
 # FastAPI Web App
 app = FastAPI()
 
-@app.get("/list_dropbox_files")
-def get_dropbox_files():
-    return list_dropbox_files()
-
-@app.post("/remember")
-def store_memory(text: str):
-    return remember_text(text)
-
-@app.get("/fast_recall_memory")
-def get_fast_recall_memory(query: str):
-    return fast_recall_memory(query)
+@app.get("/fetch_latest_notes")
+def get_latest_notes():
+    """Publicly accessible endpoint to fetch the latest Dropbox notes."""
+    return fetch_latest_dropbox_notes()
 
 @app.on_event("startup")
 async def startup_event():

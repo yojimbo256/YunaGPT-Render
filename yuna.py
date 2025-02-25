@@ -36,32 +36,17 @@ def list_dropbox_files():
         print(f"Dropbox API Error: {e}")
         return {"error": "Could not retrieve file list."}
 
-# Structured document summarization
-def structured_summarize_text(text):
-    """Summarizes the document and extracts key points & action items."""
-    try:
-        prompt = "Summarize this document, extract key points, and suggest action items."
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": text}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        print(f"OpenAI API Error: {e}")
-        return f"Error in summarizing document: {str(e)}"
+# Store text into memory
+def remember_text(text):
+    """Stores text into memory with a timestamp."""
+    collection.add(
+        ids=[str(hash(text))],  # Generate unique ID
+        documents=[text],
+        metadatas=[{"timestamp": datetime.now().strftime("%Y-%m-%d")}]
+    )
+    return {"message": "Memory stored successfully."}
 
-# Auto-categorize tasks
-def categorize_task(task, due_date):
-    """Categorizes tasks by urgency & type."""
-    priority = "High" if "urgent" in task.lower() or "asap" in task.lower() else "Medium" if "soon" in task.lower() else "Low"
-    category = "work" if "meeting" in task.lower() or "project" in task.lower() else "personal"
-    collection.add(ids=[str(hash(task))], documents=[task], metadatas=[{"priority": priority, "category": category, "due_date": due_date}])
-    return {"task": task, "category": category, "priority": priority, "due_date": due_date}
-
-# Optimized memory recall
+# Retrieve stored memories
 def fast_recall_memory(query):
     """Retrieves relevant memories with optimized search."""
     results = collection.query(query_texts=[query], n_results=5)
@@ -74,19 +59,9 @@ app = FastAPI()
 def get_dropbox_files():
     return list_dropbox_files()
 
-@app.get("/structured_summarize_dropbox_doc")
-def get_structured_summarized_doc(file: str):
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{file}")
-        text = response.content.decode("utf-8")
-        return structured_summarize_text(text)
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.post("/add_task")
-def add_task(task: str, due: str):
-    return categorize_task(task, due)
+@app.post("/remember")
+def store_memory(text: str):
+    return remember_text(text)
 
 @app.get("/fast_recall_memory")
 def get_fast_recall_memory(query: str):

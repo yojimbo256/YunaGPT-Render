@@ -76,14 +76,14 @@ def set_task_reminder(task, time):
 # Retrieve recent memories
 def recall_recent_memories(days=7):
     cutoff_date = datetime.now() - timedelta(days=days)
-    results = collection.query(n_results=10)
+    results = collection.query(query_texts=["*"], n_results=10)
     recent_memories = [mem for mem in results.get("documents", []) if "timestamp" in mem and datetime.strptime(mem["timestamp"], "%Y-%m-%d") >= cutoff_date]
     return {"recent_memories": recent_memories}
 
 # Optimize memory queries manually
 def optimize_memory_queries():
     """Performs manual cleanup of outdated memories in ChromaDB."""
-    results = collection.query(n_results=100)
+    results = collection.query(query_texts=["*"], n_results=100)
     expired_memories = [mem["id"] for mem in results.get("metadatas", []) if "timestamp" in mem and datetime.strptime(mem["timestamp"], "%Y-%m-%d") < datetime.now() - timedelta(days=30)]
     
     if expired_memories:

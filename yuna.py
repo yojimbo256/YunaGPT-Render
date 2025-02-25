@@ -1,6 +1,7 @@
 import os
 import json
 from fastapi import FastAPI
+from pydantic import BaseModel
 import openai
 import chromadb
 from chromadb.utils import embedding_functions
@@ -24,6 +25,11 @@ collection = chroma_client.create_collection("yuna_knowledge")
 
 # Corrected Dropbox file path
 DROPBOX_FOLDER_PATH = "/Apps/YunaGPT-Storage/yuna-docs/"
+
+# Define Pydantic model for JSON requests
+class DropboxRequest(BaseModel):
+    file_name: str
+    content: str
 
 # Fetch latest notes from Dropbox, summarize, and tag them
 def fetch_summarize_tag_dropbox_notes():
@@ -95,8 +101,8 @@ def store_summary(file_name, summary, tags):
     )
     print(f"Stored summary for {file_name} in memory with tags {tags}.")
 
-# Write content to Dropbox
-def write_to_dropbox(file_name, content):
+# Write content to Dropbox via JSON request
+def write_to_dropbox(file_name: str, content: str):
     """Writes a new file or updates an existing file in Dropbox."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
@@ -116,9 +122,9 @@ def get_latest_notes_with_summary_and_tags():
     return fetch_summarize_tag_dropbox_notes()
 
 @app.post("/write_to_dropbox")
-def save_to_dropbox(file_name: str, content: str):
+def save_to_dropbox(request: DropboxRequest):
     """Writes or updates a file in Dropbox."""
-    return write_to_dropbox(file_name, content)
+    return write_to_dropbox(request.file_name, request.content)
 
 @app.on_event("startup")
 async def startup_event():

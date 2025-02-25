@@ -99,10 +99,17 @@ def store_summary(file_name, summary, tags):
 def check_upcoming_tasks():
     """Retrieves tasks due within the next 3 days."""
     upcoming_tasks = []
-    results = collection.query(n_results=100)
+    
+    # Query for stored tasks
+    try:
+        results = collection.query(n_results=100)
+    except Exception as e:
+        print(f"ChromaDB Query Error: {e}")
+        return {"error": "Failed to retrieve tasks from database."}
     
     # Handle empty query results
     if not results or "metadatas" not in results or not results["metadatas"]:
+        print("No tasks found in the database.")
         return {"upcoming_tasks": "No tasks found in the database."}
     
     for task in results["metadatas"]:
@@ -115,7 +122,8 @@ def check_upcoming_tasks():
                 print(f"Invalid date format in task: {task['due_date']}")
                 continue  # Skip invalid dates
         else:
-            print(f"Missing due_date field in task: {task}")
+            print(f"Skipping task due to missing 'due_date' field: {task}")
+    
     return {"upcoming_tasks": upcoming_tasks if upcoming_tasks else "No upcoming tasks found."}
 
 # Context-aware memory recall

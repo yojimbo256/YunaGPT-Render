@@ -109,7 +109,9 @@ def check_upcoming_tasks():
             except ValueError:
                 print(f"Invalid date format in task: {task['due_date']}")
                 continue  # Skip invalid dates
-    return {"upcoming_tasks": upcoming_tasks}
+        else:
+            print(f"Missing due_date field in task: {task}")
+    return {"upcoming_tasks": upcoming_tasks if upcoming_tasks else "No upcoming tasks found."}
 
 # Context-aware memory recall
 def contextual_memory_recall(query):

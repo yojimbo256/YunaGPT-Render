@@ -11,6 +11,7 @@ from github import Github
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
 GOOGLE_DOCS_API_KEY = os.getenv("GOOGLE_DOCS_API_KEY")
+PORT = int(os.getenv("PORT", 8000))  # Default to 8000 if not set
 
 # Initialize OpenAI
 openai.api_key = OPENAI_API_KEY
@@ -98,3 +99,8 @@ def get_github_issues():
 def debug_routes():
     """Debug endpoint to list registered routes."""
     return {"routes": [route.path for route in app.routes]}
+
+# Run FastAPI with Uvicorn (ensure correct port binding)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

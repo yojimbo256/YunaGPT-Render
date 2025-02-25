@@ -22,65 +22,58 @@ chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
 # Corrected Dropbox file path based on API response
-DROPBOX_FILE_PATH = "/Apps/YunaGPT-Storage/yuna-docs/notes.txt"  # Ensure this matches the actual Dropbox file path
+DROPBOX_FOLDER_PATH = "/Apps/YunaGPT-Storage/yuna-docs/"
 
-def fetch_dropbox_doc():
-    """Fetches a text document from Dropbox."""
+# Fetch list of files from Dropbox
+def list_dropbox_files():
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        _, response = dbx.files_download(DROPBOX_FILE_PATH)
-        return {"document_content": response.content.decode("utf-8")}
-    except dropbox.exceptions.AuthError as auth_err:
-        print(f"Dropbox Auth Error: {auth_err}")  # Log the issue
-        return {"error": "Dropbox authentication failed. Check API key."}
-    except dropbox.exceptions.ApiError as api_err:
-        print(f"Dropbox API Error: {api_err}")  # Log API errors
-        return {"error": "Dropbox API error. File may not exist or incorrect file path."}
+        files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
+        file_names = [file.name for file in files]
+        return {"files": file_names}
     except Exception as e:
-        print(f"Unexpected Error: {e}")  # Catch all errors
-        return {"error": str(e)}
+        print(f"Dropbox API Error: {e}")
+        return {"error": "Could not retrieve file list."}
 
-def summarize_text(text):
-    """Summarizes the given text using OpenAI GPT-4."""
+# Fetch and categorize Dropbox files
+def categorize_dropbox_files():
+    files = list_dropbox_files()
+    if "error" in files:
+        return files
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "Summarize the following document in a concise manner."},
-                {"role": "user", "content": text}
+                {"role": "system", "content": "Categorize the following file names into meaningful groups."},
+                {"role": "user", "content": json.dumps(files["files"])}
             ]
         )
-        return response.choices[0].message.content
+        return {"categories": response.choices[0].message.content}
     except Exception as e:
         print(f"OpenAI API Error: {e}")
-        return f"Error in summarizing document: {str(e)}"
+        return {"error": "Error categorizing files."}
 
-# Initialize GitHub API Client
-try:
-    g = Github(GITHUB_ACCESS_TOKEN)
-    repo_name = "yojimbo256/YunaGPT-Render"  # Ensure this is correct
-    repo = g.get_repo(repo_name)
-except Exception as e:
-    print(f"GitHub API Error: {e}")
-    repo = None
+# Task Management in ChromaDB
+def add_task(task, due_date):
+    collection.add(documents=[task], metadatas=[{"due_date": due_date}])
+    return {"message": "Task added successfully."}
 
-def fetch_github_issues():
-    """Fetches open GitHub issues from the repository."""
-    if not repo:
-        return {"error": "GitHub repository not found or API token is incorrect."}
-    
-    try:
-        issues = repo.get_issues(state="open")
-        return [{"title": issue.title, "url": issue.html_url} for issue in issues]
-    except Exception as e:
-        return {"error": str(e)}
+def list_tasks():
+    results = collection.query(n_results=10)
+    return {"tasks": results}
 
-# Store Knowledge in ChromaDB
-def store_knowledge(title, content):
-    collection.add(embedding=embedding_functions.openai(), documents=[content], metadatas=[{"title": title}])
+def delete_task(task):
+    collection.delete(ids=[task])
+    return {"message": "Task deleted successfully."}
 
-def retrieve_knowledge(query):
-    return collection.query(query_texts=[query], n_results=5)
+# Long-Term Memory in ChromaDB
+def remember_interaction(text):
+    collection.add(documents=[text])
+    return {"message": "Memory stored successfully."}
+
+def recall_memory(query):
+    results = collection.query(query_texts=[query], n_results=5)
+    return {"memories": results}
 
 # OpenAI API Chat Memory
 conversation_history = []
@@ -110,24 +103,33 @@ def ask_yuna(query: str):
     response = chat_with_yuna(query)
     return {"response": response}
 
-@app.get("/fetch_dropbox_doc")
-def get_dropbox_doc():
-    """Fetches a document from Dropbox."""
-    content = fetch_dropbox_doc()
-    return content
+@app.get("/list_dropbox_files")
+def get_dropbox_files():
+    return list_dropbox_files()
 
-@app.get("/summarize_dropbox_doc")
-def summarize_dropbox_doc():
-    """Fetches a document from Dropbox and summarizes it."""
-    content = fetch_dropbox_doc()
-    if "error" in content:
-        return content
-    summary = summarize_text(content["document_content"])
-    return {"summary": summary}
+@app.get("/categorize_dropbox_files")
+def get_categorized_files():
+    return categorize_dropbox_files()
 
-@app.get("/fetch_github_issues")
-def get_github_issues():
-    return fetch_github_issues()
+@app.post("/add_task")
+def create_task(task: str, due_date: str):
+    return add_task(task, due_date)
+
+@app.get("/list_tasks")
+def retrieve_tasks():
+    return list_tasks()
+
+@app.delete("/delete_task")
+def remove_task(task: str):
+    return delete_task(task)
+
+@app.post("/remember")
+def store_memory(text: str):
+    return remember_interaction(text)
+
+@app.get("/recall")
+def retrieve_memory(query: str):
+    return recall_memory(query)
 
 @app.get("/debug_routes")
 def debug_routes():

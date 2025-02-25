@@ -42,6 +42,9 @@ def fetch_and_summarize_dropbox_notes():
         # Summarize document
         summary = summarize_text(content)
         
+        # Store summary in memory
+        store_summary(latest_file, summary)
+        
         return {"file": latest_file, "summary": summary}
     except Exception as e:
         print(f"Dropbox API Error: {e}")
@@ -63,6 +66,16 @@ def summarize_text(text):
         print(f"OpenAI API Error: {e}")
         return f"Error in summarizing document: {str(e)}"
 
+# Store summary in memory
+def store_summary(file_name, summary):
+    """Stores the summarized document in memory."""
+    collection.add(
+        ids=[str(hash(file_name))],
+        documents=[summary],
+        metadatas=[{"file_name": file_name, "timestamp": datetime.now().strftime("%Y-%m-%d")}]
+    )
+    print(f"Stored summary for {file_name} in memory.")
+
 # FastAPI Web App
 app = FastAPI()
 
@@ -70,6 +83,12 @@ app = FastAPI()
 def get_latest_notes_with_summary():
     """Publicly accessible endpoint to fetch the latest Dropbox notes and their summary."""
     return fetch_and_summarize_dropbox_notes()
+
+@app.get("/recall_summaries")
+def recall_summaries():
+    """Retrieve stored summaries from memory."""
+    results = collection.query(n_results=10)
+    return {"stored_summaries": results.get("documents", [])}
 
 @app.on_event("startup")
 async def startup_event():

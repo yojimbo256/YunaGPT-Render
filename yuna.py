@@ -98,9 +98,15 @@ def get_github_issues():
 @app.get("/debug_routes")
 def debug_routes():
     """Debug endpoint to list registered routes."""
-    return {"routes": [route.path for route in app.routes]}
+    routes = [route.path for route in app.routes]
+    print(f"DEBUG: Registered Routes -> {routes}")  # Logs routes during startup
+    return {"routes": routes}
+
+@app.on_event("startup")
+async def startup_event():
+    print("\U0001F680 YunaGPT API has started successfully on Render!")
 
 # Run FastAPI with Uvicorn (ensure correct port binding)
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host="0.0.0.0", port=PORT, reload=True)

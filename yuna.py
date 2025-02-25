@@ -15,7 +15,7 @@ DROPBOX_ACCESS_TOKEN = os.getenv("DROPBOX_ACCESS_TOKEN")
 PORT = int(os.getenv("PORT", 8000))  # Default to 8000 if not set
 
 # Initialize OpenAI Client
-client = openai.OpenAI(api_key=OPENAI_API_KEY)
+openai.api_key = OPENAI_API_KEY 
 
 # Initialize ChromaDB for Persistent Memory
 chroma_client = chromadb.Client()

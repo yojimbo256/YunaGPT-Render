@@ -21,7 +21,8 @@ openai.api_key = OPENAI_API_KEY
 chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
-DROPBOX_FILE_PATH = "/yuna-docs/notes.txt" # Path to your document in Dropbox
+# Corrected Dropbox file path
+DROPBOX_FILE_PATH = "/yuna-docs/notes.txt"  # Ensure this matches the actual Dropbox file path
 
 def fetch_dropbox_doc():
     """Fetches a text document from Dropbox."""
@@ -29,7 +30,14 @@ def fetch_dropbox_doc():
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
         _, response = dbx.files_download(DROPBOX_FILE_PATH)
         return {"document_content": response.content.decode("utf-8")}
-    except dropbox.exceptions.ApiError as e:
+    except dropbox.exceptions.AuthError as auth_err:
+        print(f"Dropbox Auth Error: {auth_err}")  # Log the issue
+        return {"error": "Dropbox authentication failed. Check API key."}
+    except dropbox.exceptions.ApiError as api_err:
+        print(f"Dropbox API Error: {api_err}")  # Log API errors
+        return {"error": "Dropbox API error. File may not exist."}
+    except Exception as e:
+        print(f"Unexpected Error: {e}")  # Catch all errors
         return {"error": str(e)}
 
 # Initialize GitHub API Client

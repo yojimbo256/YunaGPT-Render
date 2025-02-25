@@ -76,6 +76,12 @@ def store_summary(file_name, summary):
     )
     print(f"Stored summary for {file_name} in memory.")
 
+# Search stored summaries
+def search_summaries(query):
+    """Retrieves stored summaries that match a query."""
+    results = collection.query(query_texts=[query], n_results=5)
+    return {"matching_summaries": results.get("documents", [])}
+
 # FastAPI Web App
 app = FastAPI()
 
@@ -89,6 +95,11 @@ def recall_summaries():
     """Retrieve stored summaries from memory."""
     results = collection.query(n_results=10)
     return {"stored_summaries": results.get("documents", [])}
+
+@app.get("/search_summaries")
+def search_stored_summaries(query: str):
+    """Search stored summaries by keyword."""
+    return search_summaries(query)
 
 @app.on_event("startup")
 async def startup_event():

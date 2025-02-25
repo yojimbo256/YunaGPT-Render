@@ -6,12 +6,12 @@ import chromadb
 from chromadb.utils import embedding_functions
 from github import Github
 import requests
+import dropbox
 
 # Load API Keys from Render Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
-NOTION_API_KEY = os.getenv("NOTION_API_KEY")
-NOTION_PAGE_ID = os.getenv("NOTION_PAGE_ID")
+DROPBOX_ACCESS_TOKEN = os.getenv("DROPBOX_ACCESS_TOKEN")
 PORT = int(os.getenv("PORT", 8000))  # Default to 8000 if not set
 
 # Initialize OpenAI
@@ -21,18 +21,15 @@ openai.api_key = OPENAI_API_KEY
 chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
-def fetch_notion_doc():
-    """Fetches content from a Notion page using Notion API."""
-    url = f"https://api.notion.com/v1/pages/{NOTION_PAGE_ID}"
-    headers = {
-        "Authorization": f"Bearer {NOTION_API_KEY}",
-        "Notion-Version": "2022-06-28"
-    }
+DROPBOX_FILE_PATH = "/yuna-docs/notes.txt"  # Path to your document in Dropbox
+
+def fetch_dropbox_doc():
+    """Fetches a text document from Dropbox."""
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json()  # Returns full page JSON
-    except requests.exceptions.RequestException as e:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        _, response = dbx.files_download(DROPBOX_FILE_PATH)
+        return {"document_content": response.content.decode("utf-8")}
+    except dropbox.exceptions.ApiError as e:
         return {"error": str(e)}
 
 # Initialize GitHub API Client
@@ -90,11 +87,11 @@ def ask_yuna(query: str):
     response = chat_with_yuna(query)
     return {"response": response}
 
-@app.get("/fetch_notion_doc")
-def get_notion_doc():
-    """Fetches a document from Notion."""
-    content = fetch_notion_doc()
-    return {"notion_content": content}
+@app.get("/fetch_dropbox_doc")
+def get_dropbox_doc():
+    """Fetches a document from Dropbox."""
+    content = fetch_dropbox_doc()
+    return content
 
 @app.get("/fetch_github_issues")
 def get_github_issues():

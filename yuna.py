@@ -36,6 +36,22 @@ def list_dropbox_files():
         print(f"Dropbox API Error: {e}")
         return {"error": "Could not retrieve file list."}
 
+# Summarize text using OpenAI GPT-4
+def summarize_text(text):
+    """Summarizes the given text using OpenAI GPT-4."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Summarize the following document in a concise manner."},
+                {"role": "user", "content": text}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return f"Error in summarizing document: {str(e)}"
+
 # Multi-file summarization
 def multi_summarize_dropbox_docs():
     files = list_dropbox_files()
@@ -67,46 +83,6 @@ def extract_key_points(text):
         print(f"OpenAI API Error: {e}")
         return "Error extracting key points."
 
-# Task Management in ChromaDB
-def add_task(task, due_date, priority="medium"):
-    collection.add(ids=[str(hash(task))], documents=[task], metadatas=[{"due_date": due_date, "priority": priority}])
-    return {"message": "Task added successfully."}
-
-def list_tasks():
-    results = collection.query(n_results=10)
-    if results and "documents" in results:
-        return {"tasks": results["documents"]}
-    else:
-        return {"error": "No tasks found."}
-
-def list_high_priority_tasks():
-    results = collection.query(n_results=10)
-    high_priority_tasks = [task for task in results.get("documents", []) if task.get("priority") == "high"]
-    return {"high_priority_tasks": high_priority_tasks}
-
-def daily_tasks_summary():
-    today = datetime.now().strftime("%Y-%m-%d")
-    results = collection.query(n_results=10)
-    tasks = [task for task in results.get("documents", []) if task.get("due_date") == today]
-    return {"tasks_due_today": tasks}
-
-def delete_task(task):
-    collection.delete(ids=[str(hash(task))])
-    return {"message": "Task deleted successfully."}
-
-# Long-Term Memory in ChromaDB
-def remember_interaction(text, category="general"):
-    collection.add(ids=[str(hash(text))], documents=[text], metadatas=[{"category": category}])
-    return {"message": "Memory stored successfully."}
-
-def search_memory(query, category=None):
-    filters = {"category": category} if category else {}
-    results = collection.query(query_texts=[query], n_results=5, where=filters)
-    if results and "documents" in results and results["documents"]:
-        return {"memories": results["documents"]}
-    else:
-        return {"error": "No relevant memories found."}
-
 # FastAPI Web App
 app = FastAPI()
 
@@ -121,34 +97,6 @@ def get_multi_summarized_docs():
 @app.get("/extract_key_points")
 def get_key_points(text: str):
     return extract_key_points(text)
-
-@app.post("/add_task")
-def create_task(task: str, due_date: str, priority: str="medium"):
-    return add_task(task, due_date, priority)
-
-@app.get("/list_tasks")
-def retrieve_tasks():
-    return list_tasks()
-
-@app.get("/list_high_priority_tasks")
-def retrieve_high_priority_tasks():
-    return list_high_priority_tasks()
-
-@app.get("/daily_tasks_summary")
-def retrieve_daily_tasks():
-    return daily_tasks_summary()
-
-@app.delete("/delete_task")
-def remove_task(task: str):
-    return delete_task(task)
-
-@app.post("/remember")
-def store_memory(text: str, category: str="general"):
-    return remember_interaction(text, category)
-
-@app.get("/search_memory")
-def retrieve_memory(query: str, category: str=None):
-    return search_memory(query, category)
 
 @app.on_event("startup")
 async def startup_event():

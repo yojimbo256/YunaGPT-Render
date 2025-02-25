@@ -7,7 +7,7 @@ from chromadb.utils import embedding_functions
 from github import Github
 import requests
 import dropbox
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Load API Keys from Render Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -25,9 +25,9 @@ collection = chroma_client.create_collection("yuna_knowledge")
 # Corrected Dropbox file path
 DROPBOX_FOLDER_PATH = "/Apps/YunaGPT-Storage/yuna-docs/"
 
-# Fetch latest notes from Dropbox and summarize them
-def fetch_and_summarize_dropbox_notes():
-    """Fetches the latest text document from Dropbox and returns a structured summary."""
+# Fetch latest notes from Dropbox, summarize, and tag them
+def fetch_summarize_tag_dropbox_notes():
+    """Fetches the latest text document from Dropbox, summarizes, and tags it."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
         files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
@@ -42,10 +42,13 @@ def fetch_and_summarize_dropbox_notes():
         # Summarize document
         summary = summarize_text(content)
         
-        # Store summary in memory
-        store_summary(latest_file, summary)
+        # Tag document based on content
+        tags = generate_tags(summary)
         
-        return {"file": latest_file, "summary": summary}
+        # Store summary and tags in memory
+        store_summary(latest_file, summary, tags)
+        
+        return {"file": latest_file, "summary": summary, "tags": tags}
     except Exception as e:
         print(f"Dropbox API Error: {e}")
         return {"error": str(e)}
@@ -66,40 +69,67 @@ def summarize_text(text):
         print(f"OpenAI API Error: {e}")
         return f"Error in summarizing document: {str(e)}"
 
-# Store summary in memory
-def store_summary(file_name, summary):
-    """Stores the summarized document in memory."""
+# Generate tags for document
+def generate_tags(text):
+    """Generates topic tags for a given text."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Extract topic tags from the following text."},
+                {"role": "user", "content": text}
+            ]
+        )
+        return response["choices"][0]["message"]["content"].split(", ")
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return ["error"]
+
+# Store summary and tags in memory
+def store_summary(file_name, summary, tags):
+    """Stores the summarized document in memory along with topic tags."""
     collection.add(
         ids=[str(hash(file_name))],
         documents=[summary],
-        metadatas=[{"file_name": file_name, "timestamp": datetime.now().strftime("%Y-%m-%d")}]
+        metadatas=[{"file_name": file_name, "tags": tags, "timestamp": datetime.now().strftime("%Y-%m-%d")}]
     )
-    print(f"Stored summary for {file_name} in memory.")
+    print(f"Stored summary for {file_name} in memory with tags {tags}.")
 
-# Search stored summaries
-def search_summaries(query):
-    """Retrieves stored summaries that match a query."""
+# Retrieve upcoming and overdue tasks
+def check_upcoming_tasks():
+    """Retrieves tasks due within the next 3 days."""
+    upcoming_tasks = []
+    results = collection.query(n_results=100)
+    for task in results.get("metadatas", []):
+        if "due_date" in task:
+            due_date = datetime.strptime(task["due_date"], "%Y-%m-%d")
+            if due_date <= datetime.now() + timedelta(days=3):
+                upcoming_tasks.append(task)
+    return {"upcoming_tasks": upcoming_tasks}
+
+# Context-aware memory recall
+def contextual_memory_recall(query):
+    """Retrieves stored memories relevant to the query."""
     results = collection.query(query_texts=[query], n_results=5)
-    return {"matching_summaries": results.get("documents", [])}
+    return {"related_memories": results.get("documents", [])}
 
 # FastAPI Web App
 app = FastAPI()
 
-@app.get("/fetch_latest_notes_with_summary")
-def get_latest_notes_with_summary():
-    """Publicly accessible endpoint to fetch the latest Dropbox notes and their summary."""
-    return fetch_and_summarize_dropbox_notes()
+@app.get("/fetch_latest_notes_with_summary_and_tags")
+def get_latest_notes_with_summary_and_tags():
+    """Fetches, summarizes, and tags the latest Dropbox document."""
+    return fetch_summarize_tag_dropbox_notes()
 
-@app.get("/recall_summaries")
-def recall_summaries():
-    """Retrieve stored summaries from memory."""
-    results = collection.query(n_results=10)
-    return {"stored_summaries": results.get("documents", [])}
+@app.get("/check_upcoming_tasks")
+def get_upcoming_tasks():
+    """Lists tasks due within the next 3 days."""
+    return check_upcoming_tasks()
 
-@app.get("/search_summaries")
-def search_stored_summaries(query: str):
-    """Search stored summaries by keyword."""
-    return search_summaries(query)
+@app.get("/contextual_memory_recall")
+def get_contextual_memory_recall(query: str):
+    """Retrieves stored memories relevant to the query."""
+    return contextual_memory_recall(query)
 
 @app.on_event("startup")
 async def startup_event():

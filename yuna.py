@@ -21,7 +21,7 @@ openai.api_key = OPENAI_API_KEY
 chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
-DROPBOX_FILE_PATH = "/yuna-docs/notes.txt"  # Path to your document in Dropbox
+DROPBOX_FILE_PATH = "/yuna-docs/notes.txt" # Path to your document in Dropbox
 
 def fetch_dropbox_doc():
     """Fetches a text document from Dropbox."""

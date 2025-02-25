@@ -7,7 +7,7 @@ from chromadb.utils import embedding_functions
 from github import Github
 import requests
 import dropbox
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Load API Keys from Render Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -37,13 +37,14 @@ def list_dropbox_files():
         return {"error": "Could not retrieve file list."}
 
 # Summarize text using OpenAI GPT-4
-def summarize_text(text):
+def summarize_text(text, detail_level="concise"):
     """Summarizes the given text using OpenAI GPT-4."""
     try:
+        prompt = "Summarize the following document in a " + ("detailed" if detail_level == "detailed" else "concise") + " manner."
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "Summarize the following document in a concise manner."},
+                {"role": "system", "content": prompt},
                 {"role": "user", "content": text}
             ]
         )
@@ -52,36 +53,37 @@ def summarize_text(text):
         print(f"OpenAI API Error: {e}")
         return f"Error in summarizing document: {str(e)}"
 
-# Multi-file summarization
-def multi_summarize_dropbox_docs():
-    files = list_dropbox_files()
+# Summarize selected Dropbox files
+def summarize_selected_dropbox_docs(files, detail_level="concise"):
     summaries = {}
-    for file_name in files.get("files", []):
+    for file_name in files:
         file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"  # Ensure no extra '/'
         try:
             dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
             _, response = dbx.files_download(file_path)
             text = response.content.decode("utf-8")
-            summary = summarize_text(text)
+            summary = summarize_text(text, detail_level)
             summaries[file_name] = summary
         except Exception as e:
             summaries[file_name] = f"Error: {e}"
     return summaries
 
-# Extract key points from a document
-def extract_key_points(text):
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Extract key points from the following document."},
-                {"role": "user", "content": text}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        print(f"OpenAI API Error: {e}")
-        return "Error extracting key points."
+# Task Reminders
+def set_task_reminder(task, time):
+    collection.add(ids=[str(hash(task))], documents=[task], metadatas=[{"reminder_time": time}])
+    return {"message": "Task reminder set successfully."}
+
+# Retrieve recent memories
+def recall_recent_memories(days=7):
+    cutoff_date = datetime.now() - timedelta(days=days)
+    results = collection.query(n_results=10)
+    recent_memories = [mem for mem in results.get("documents", []) if datetime.strptime(mem.get("timestamp", "1970-01-01"), "%Y-%m-%d") >= cutoff_date]
+    return {"recent_memories": recent_memories}
+
+# Optimize memory queries
+def optimize_memory_queries():
+    collection.optimize()
+    return {"message": "Memory database optimized for faster queries."}
 
 # FastAPI Web App
 app = FastAPI()
@@ -90,13 +92,22 @@ app = FastAPI()
 def get_dropbox_files():
     return list_dropbox_files()
 
-@app.get("/multi_summarize_dropbox_docs")
-def get_multi_summarized_docs():
-    return multi_summarize_dropbox_docs()
+@app.get("/summarize_selected_dropbox_docs")
+def get_selected_summarized_docs(files: str, detail_level: str="concise"):
+    file_list = files.split(",")
+    return summarize_selected_dropbox_docs(file_list, detail_level)
 
-@app.get("/extract_key_points")
-def get_key_points(text: str):
-    return extract_key_points(text)
+@app.post("/set_task_reminder")
+def create_task_reminder(task: str, time: str):
+    return set_task_reminder(task, time)
+
+@app.get("/recall_recent_memories")
+def get_recent_memories(days: int=7):
+    return recall_recent_memories(days)
+
+@app.get("/optimize_memory_queries")
+def optimize_memory():
+    return optimize_memory_queries()
 
 @app.on_event("startup")
 async def startup_event():

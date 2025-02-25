@@ -31,9 +31,13 @@ class DropboxRequest(BaseModel):
     file_name: str
     content: str
 
-# Fetch latest notes from Dropbox, summarize, and tag them
-def fetch_summarize_tag_dropbox_notes():
-    """Fetches the latest text document from Dropbox, summarizes, and tags it."""
+class UpdateDropboxRequest(BaseModel):
+    file_name: str
+    update_content: str
+
+# Fetch latest notes from Dropbox, summarize, tag, and auto-save them
+def fetch_summarize_tag_and_save():
+    """Fetches the latest text document from Dropbox, summarizes, tags it, and saves it back to Dropbox."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
         files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
@@ -54,7 +58,10 @@ def fetch_summarize_tag_dropbox_notes():
         # Store summary and tags in memory
         store_summary(latest_file, summary, tags)
         
-        return {"file": latest_file, "summary": summary, "tags": tags}
+        # Auto-save the summary to Dropbox
+        write_to_dropbox(f"summary_{latest_file}", summary)
+        
+        return {"file": latest_file, "summary": summary, "tags": tags, "auto_saved": True}
     except Exception as e:
         print(f"Dropbox API Error: {e}")
         return {"error": str(e)}
@@ -101,9 +108,9 @@ def store_summary(file_name, summary, tags):
     )
     print(f"Stored summary for {file_name} in memory with tags {tags}.")
 
-# Write content to Dropbox via JSON request
+# Write content to Dropbox
 def write_to_dropbox(file_name: str, content: str):
-    """Writes a new file or updates an existing file in Dropbox."""
+    """Writes or updates a file in Dropbox."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
         file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
@@ -113,18 +120,43 @@ def write_to_dropbox(file_name: str, content: str):
         print(f"Dropbox Write Error: {e}")
         return {"error": str(e)}
 
+# Append updates to an existing Dropbox file
+def update_dropbox_file(file_name: str, update_content: str):
+    """Appends new content to an existing Dropbox file, or creates it if it doesn’t exist."""
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
+        try:
+            _, response = dbx.files_download(file_path)
+            existing_content = response.content.decode("utf-8")
+            updated_content = existing_content + "\n" + update_content
+        except dropbox.exceptions.ApiError:
+            print(f"File {file_name} does not exist. Creating a new one.")
+            updated_content = update_content
+        
+        dbx.files_upload(updated_content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
+        return {"message": f"Updated {file_name} in Dropbox."}
+    except Exception as e:
+        print(f"Dropbox Update Error: {e}")
+        return {"error": str(e)}
+
 # FastAPI Web App
 app = FastAPI()
 
 @app.get("/fetch_latest_notes_with_summary_and_tags")
 def get_latest_notes_with_summary_and_tags():
-    """Fetches, summarizes, and tags the latest Dropbox document."""
-    return fetch_summarize_tag_dropbox_notes()
+    """Fetches, summarizes, tags, and auto-saves the latest Dropbox document."""
+    return fetch_summarize_tag_and_save()
 
 @app.post("/write_to_dropbox")
 def save_to_dropbox(request: DropboxRequest):
     """Writes or updates a file in Dropbox."""
     return write_to_dropbox(request.file_name, request.content)
+
+@app.post("/update_dropbox_file")
+def append_to_dropbox(request: UpdateDropboxRequest):
+    """Appends updates to an existing Dropbox file."""
+    return update_dropbox_file(request.file_name, request.update_content)
 
 @app.on_event("startup")
 async def startup_event():

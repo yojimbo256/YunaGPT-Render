@@ -31,14 +31,24 @@ def fetch_google_doc():
         return {"error": str(e)}
 
 # Initialize GitHub API Client
-g = Github(GITHUB_ACCESS_TOKEN)
-repo_name = "your_github_username/your_repo_name"  # Replace with your repo
-repo = g.get_repo(repo_name)
+try:
+    g = Github(GITHUB_ACCESS_TOKEN)
+    repo_name = "yojimbo256/YunaGPT-Render"  # Ensure this is correct
+    repo = g.get_repo(repo_name)
+except Exception as e:
+    print(f"GitHub API Error: {e}")
+    repo = None
 
 def fetch_github_issues():
     """Fetches open GitHub issues from the repository."""
-    issues = repo.get_issues(state="open")
-    return [{"title": issue.title, "url": issue.html_url} for issue in issues]
+    if not repo:
+        return {"error": "GitHub repository not found or API token is incorrect."}
+    
+    try:
+        issues = repo.get_issues(state="open")
+        return [{"title": issue.title, "url": issue.html_url} for issue in issues]
+    except Exception as e:
+        return {"error": str(e)}
 
 # Store Knowledge in ChromaDB
 def store_knowledge(title, content):
@@ -82,5 +92,9 @@ def get_google_doc():
 
 @app.get("/fetch_github_issues")
 def get_github_issues():
-    issues = fetch_github_issues()
-    return {"github_issues": issues}
+    return fetch_github_issues()
+
+@app.get("/debug_routes")
+def debug_routes():
+    """Debug endpoint to list registered routes."""
+    return {"routes": [route.path for route in app.routes]}

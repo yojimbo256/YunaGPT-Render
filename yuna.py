@@ -80,10 +80,10 @@ def generate_tags(text):
                 {"role": "user", "content": text}
             ]
         )
-        return response["choices"][0]["message"]["content"].split(", ")
+        return ", ".join(response["choices"][0]["message"]["content"].split(", "))
     except Exception as e:
         print(f"OpenAI API Error: {e}")
-        return ["error"]
+        return "error"
 
 # Store summary and tags in memory
 def store_summary(file_name, summary, tags):
@@ -101,17 +101,24 @@ def check_upcoming_tasks():
     upcoming_tasks = []
     results = collection.query(n_results=100)
     for task in results.get("metadatas", []):
-        if "due_date" in task:
-            due_date = datetime.strptime(task["due_date"], "%Y-%m-%d")
-            if due_date <= datetime.now() + timedelta(days=3):
-                upcoming_tasks.append(task)
+        if "due_date" in task and isinstance(task["due_date"], str):
+            try:
+                due_date = datetime.strptime(task["due_date"], "%Y-%m-%d")
+                if due_date <= datetime.now() + timedelta(days=3):
+                    upcoming_tasks.append(task)
+            except ValueError:
+                print(f"Invalid date format in task: {task['due_date']}")
+                continue  # Skip invalid dates
     return {"upcoming_tasks": upcoming_tasks}
 
 # Context-aware memory recall
 def contextual_memory_recall(query):
     """Retrieves stored memories relevant to the query."""
     results = collection.query(query_texts=[query], n_results=5)
-    return {"related_memories": results.get("documents", [])}
+    if results and "documents" in results and results["documents"]:
+        return {"related_memories": results["documents"]}
+    else:
+        return {"error": "No relevant memories found. Try broadening your query."}
 
 # FastAPI Web App
 app = FastAPI()

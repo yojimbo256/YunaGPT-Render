@@ -77,13 +77,19 @@ def set_task_reminder(task, time):
 def recall_recent_memories(days=7):
     cutoff_date = datetime.now() - timedelta(days=days)
     results = collection.query(n_results=10)
-    recent_memories = [mem for mem in results.get("documents", []) if datetime.strptime(mem.get("timestamp", "1970-01-01"), "%Y-%m-%d") >= cutoff_date]
+    recent_memories = [mem for mem in results.get("documents", []) if "timestamp" in mem and datetime.strptime(mem["timestamp"], "%Y-%m-%d") >= cutoff_date]
     return {"recent_memories": recent_memories}
 
-# Optimize memory queries
+# Optimize memory queries manually
 def optimize_memory_queries():
-    collection.optimize()
-    return {"message": "Memory database optimized for faster queries."}
+    """Performs manual cleanup of outdated memories in ChromaDB."""
+    results = collection.query(n_results=100)
+    expired_memories = [mem["id"] for mem in results.get("metadatas", []) if "timestamp" in mem and datetime.strptime(mem["timestamp"], "%Y-%m-%d") < datetime.now() - timedelta(days=30)]
+    
+    if expired_memories:
+        collection.delete(expired_memories)
+    
+    return {"message": f"Optimized memory. {len(expired_memories)} old records removed."}
 
 # FastAPI Web App
 app = FastAPI()

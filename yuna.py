@@ -36,11 +36,11 @@ def list_dropbox_files():
         print(f"Dropbox API Error: {e}")
         return {"error": "Could not retrieve file list."}
 
-# Summarize text using OpenAI GPT-4
-def summarize_text(text, detail_level="concise"):
-    """Summarizes the given text using OpenAI GPT-4."""
+# Structured document summarization
+def structured_summarize_text(text):
+    """Summarizes the document and extracts key points & action items."""
     try:
-        prompt = "Summarize the following document in a " + ("detailed" if detail_level == "detailed" else "concise") + " manner."
+        prompt = "Summarize this document, extract key points, and suggest action items."
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
@@ -53,43 +53,19 @@ def summarize_text(text, detail_level="concise"):
         print(f"OpenAI API Error: {e}")
         return f"Error in summarizing document: {str(e)}"
 
-# Summarize selected Dropbox files
-def summarize_selected_dropbox_docs(files, detail_level="concise"):
-    summaries = {}
-    for file_name in files:
-        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"  # Ensure no extra '/'
-        try:
-            dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-            _, response = dbx.files_download(file_path)
-            text = response.content.decode("utf-8")
-            summary = summarize_text(text, detail_level)
-            summaries[file_name] = summary
-        except Exception as e:
-            summaries[file_name] = f"Error: {e}"
-    return summaries
+# Auto-categorize tasks
+def categorize_task(task, due_date):
+    """Categorizes tasks by urgency & type."""
+    priority = "High" if "urgent" in task.lower() or "asap" in task.lower() else "Medium" if "soon" in task.lower() else "Low"
+    category = "work" if "meeting" in task.lower() or "project" in task.lower() else "personal"
+    collection.add(ids=[str(hash(task))], documents=[task], metadatas=[{"priority": priority, "category": category, "due_date": due_date}])
+    return {"task": task, "category": category, "priority": priority, "due_date": due_date}
 
-# Task Reminders
-def set_task_reminder(task, time):
-    collection.add(ids=[str(hash(task))], documents=[task], metadatas=[{"reminder_time": time}])
-    return {"message": "Task reminder set successfully."}
-
-# Retrieve recent memories
-def recall_recent_memories(days=7):
-    cutoff_date = datetime.now() - timedelta(days=days)
-    results = collection.query(query_texts=["*"], n_results=10)
-    recent_memories = [mem for mem in results.get("documents", []) if "timestamp" in mem and datetime.strptime(mem["timestamp"], "%Y-%m-%d") >= cutoff_date]
-    return {"recent_memories": recent_memories}
-
-# Optimize memory queries manually
-def optimize_memory_queries():
-    """Performs manual cleanup of outdated memories in ChromaDB."""
-    results = collection.query(query_texts=["*"], n_results=100)
-    expired_memories = [mem["id"] for mem in results.get("metadatas", []) if "timestamp" in mem and datetime.strptime(mem["timestamp"], "%Y-%m-%d") < datetime.now() - timedelta(days=30)]
-    
-    if expired_memories:
-        collection.delete(expired_memories)
-    
-    return {"message": f"Optimized memory. {len(expired_memories)} old records removed."}
+# Optimized memory recall
+def fast_recall_memory(query):
+    """Retrieves relevant memories with optimized search."""
+    results = collection.query(query_texts=[query], n_results=5)
+    return {"matching_memories": results.get("documents", [])}
 
 # FastAPI Web App
 app = FastAPI()
@@ -98,22 +74,23 @@ app = FastAPI()
 def get_dropbox_files():
     return list_dropbox_files()
 
-@app.get("/summarize_selected_dropbox_docs")
-def get_selected_summarized_docs(files: str, detail_level: str="concise"):
-    file_list = files.split(",")
-    return summarize_selected_dropbox_docs(file_list, detail_level)
+@app.get("/structured_summarize_dropbox_doc")
+def get_structured_summarized_doc(file: str):
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{file}")
+        text = response.content.decode("utf-8")
+        return structured_summarize_text(text)
+    except Exception as e:
+        return {"error": str(e)}
 
-@app.post("/set_task_reminder")
-def create_task_reminder(task: str, time: str):
-    return set_task_reminder(task, time)
+@app.post("/add_task")
+def add_task(task: str, due: str):
+    return categorize_task(task, due)
 
-@app.get("/recall_recent_memories")
-def get_recent_memories(days: int=7):
-    return recall_recent_memories(days)
-
-@app.get("/optimize_memory_queries")
-def optimize_memory():
-    return optimize_memory_queries()
+@app.get("/fast_recall_memory")
+def get_fast_recall_memory(query: str):
+    return fast_recall_memory(query)
 
 @app.on_event("startup")
 async def startup_event():

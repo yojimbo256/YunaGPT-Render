@@ -95,45 +95,17 @@ def store_summary(file_name, summary, tags):
     )
     print(f"Stored summary for {file_name} in memory with tags {tags}.")
 
-# Retrieve upcoming and overdue tasks
-def check_upcoming_tasks():
-    """Retrieves tasks due within the next 3 days."""
-    upcoming_tasks = []
-    
-    # Query for stored tasks using a broad wildcard search
+# Write content to Dropbox
+def write_to_dropbox(file_name, content):
+    """Writes a new file or updates an existing file in Dropbox."""
     try:
-        results = collection.query(query_texts=["*"], n_results=100)
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
+        dbx.files_upload(content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
+        return {"message": f"Successfully written to {file_name} in Dropbox."}
     except Exception as e:
-        print(f"ChromaDB Query Error: {e}")
-        return {"error": "Failed to retrieve tasks from database."}
-    
-    # Handle empty query results
-    if not results or "metadatas" not in results or not results["metadatas"]:
-        print("No tasks found in the database.")
-        return {"upcoming_tasks": "No tasks found in the database."}
-    
-    for task in results["metadatas"]:
-        if "due_date" in task and isinstance(task["due_date"], str):
-            try:
-                due_date = datetime.strptime(task["due_date"], "%Y-%m-%d")
-                if due_date <= datetime.now() + timedelta(days=3):
-                    upcoming_tasks.append(task)
-            except ValueError:
-                print(f"Invalid date format in task: {task['due_date']}")
-                continue  # Skip invalid dates
-        else:
-            print(f"Skipping task due to missing 'due_date' field: {task}")
-    
-    return {"upcoming_tasks": upcoming_tasks if upcoming_tasks else "No upcoming tasks found."}
-
-# Context-aware memory recall
-def contextual_memory_recall(query):
-    """Retrieves stored memories relevant to the query."""
-    results = collection.query(query_texts=[query], n_results=5)
-    if results and "documents" in results and results["documents"]:
-        return {"related_memories": results["documents"]}
-    else:
-        return {"error": "No relevant memories found. Try broadening your query."}
+        print(f"Dropbox Write Error: {e}")
+        return {"error": str(e)}
 
 # FastAPI Web App
 app = FastAPI()
@@ -143,15 +115,10 @@ def get_latest_notes_with_summary_and_tags():
     """Fetches, summarizes, and tags the latest Dropbox document."""
     return fetch_summarize_tag_dropbox_notes()
 
-@app.get("/check_upcoming_tasks")
-def get_upcoming_tasks():
-    """Lists tasks due within the next 3 days."""
-    return check_upcoming_tasks()
-
-@app.get("/contextual_memory_recall")
-def get_contextual_memory_recall(query: str):
-    """Retrieves stored memories relevant to the query."""
-    return contextual_memory_recall(query)
+@app.post("/write_to_dropbox")
+def save_to_dropbox(file_name: str, content: str):
+    """Writes or updates a file in Dropbox."""
+    return write_to_dropbox(file_name, content)
 
 @app.on_event("startup")
 async def startup_event():

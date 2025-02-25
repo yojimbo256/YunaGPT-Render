@@ -43,7 +43,7 @@ def fetch_dropbox_doc():
 def summarize_text(text):
     """Summarizes the given text using OpenAI GPT-4."""
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "Summarize the following document in a concise manner."},
@@ -89,7 +89,7 @@ def chat_with_yuna(prompt):
     global conversation_history
     conversation_history.append({"role": "user", "content": prompt})
     
-    response = client.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model="gpt-4",
         messages=conversation_history
     )

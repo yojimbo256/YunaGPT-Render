@@ -22,7 +22,7 @@ chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
 # Corrected Dropbox file path
-DROPBOX_FILE_PATH = "/yuna-docs/notes.txt"  # Ensure this matches the actual Dropbox file path
+DROPBOX_FILE_PATH = "/yuna-docs/notes.txt" # Ensure this matches the actual Dropbox file path
 
 def fetch_dropbox_doc():
     """Fetches a text document from Dropbox."""

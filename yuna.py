@@ -40,6 +40,21 @@ def fetch_dropbox_doc():
         print(f"Unexpected Error: {e}")  # Catch all errors
         return {"error": str(e)}
 
+def summarize_text(text):
+    """Summarizes the given text using OpenAI GPT-4."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Summarize the following document in a concise manner."},
+                {"role": "user", "content": text}
+            ]
+        )
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return "Error in summarizing document."
+
 # Initialize GitHub API Client
 try:
     g = Github(GITHUB_ACCESS_TOKEN)
@@ -100,6 +115,15 @@ def get_dropbox_doc():
     """Fetches a document from Dropbox."""
     content = fetch_dropbox_doc()
     return content
+
+@app.get("/summarize_dropbox_doc")
+def summarize_dropbox_doc():
+    """Fetches a document from Dropbox and summarizes it."""
+    content = fetch_dropbox_doc()
+    if "error" in content:
+        return content
+    summary = summarize_text(content["document_content"])
+    return {"summary": summary}
 
 @app.get("/fetch_github_issues")
 def get_github_issues():

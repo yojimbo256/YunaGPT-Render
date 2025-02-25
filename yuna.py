@@ -52,8 +52,8 @@ def summarize_text(text):
         )
         return response["choices"][0]["message"]["content"]
     except Exception as e:
-        print(f"OpenAI API Error: {e}")
-        return "Error in summarizing document."
+        print(f"OpenAI API Error: {e}")  # Log the exact error
+        return f"Error in summarizing document: {str(e)}"
 
 # Initialize GitHub API Client
 try:

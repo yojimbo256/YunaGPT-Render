@@ -14,8 +14,8 @@ GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
 DROPBOX_ACCESS_TOKEN = os.getenv("DROPBOX_ACCESS_TOKEN")
 PORT = int(os.getenv("PORT", 8000))  # Default to 8000 if not set
 
-# Initialize OpenAI
-openai.api_key = OPENAI_API_KEY
+# Initialize OpenAI Client
+client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
 # Initialize ChromaDB for Persistent Memory
 chroma_client = chromadb.Client()
@@ -43,16 +43,16 @@ def fetch_dropbox_doc():
 def summarize_text(text):
     """Summarizes the given text using OpenAI GPT-4."""
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "Summarize the following document in a concise manner."},
                 {"role": "user", "content": text}
             ]
         )
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"OpenAI API Error: {e}")  # Log the exact error
+        print(f"OpenAI API Error: {e}")
         return f"Error in summarizing document: {str(e)}"
 
 # Initialize GitHub API Client
@@ -89,12 +89,12 @@ def chat_with_yuna(prompt):
     global conversation_history
     conversation_history.append({"role": "user", "content": prompt})
     
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4",
         messages=conversation_history
     )
     
-    reply = response["choices"][0]["message"]["content"]
+    reply = response.choices[0].message.content
     conversation_history.append({"role": "assistant", "content": reply})
     return reply
 

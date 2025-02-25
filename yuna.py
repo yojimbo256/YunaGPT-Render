@@ -41,7 +41,7 @@ def multi_summarize_dropbox_docs():
     files = list_dropbox_files()
     summaries = {}
     for file_name in files.get("files", []):
-        file_path = f"{DROPBOX_FOLDER_PATH}/{file_name}"
+        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"  # Ensure no extra '/'
         try:
             dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
             _, response = dbx.files_download(file_path)
@@ -102,7 +102,7 @@ def remember_interaction(text, category="general"):
 def search_memory(query, category=None):
     filters = {"category": category} if category else {}
     results = collection.query(query_texts=[query], n_results=5, where=filters)
-    if results and "documents" in results:
+    if results and "documents" in results and results["documents"]:
         return {"memories": results["documents"]}
     else:
         return {"error": "No relevant memories found."}

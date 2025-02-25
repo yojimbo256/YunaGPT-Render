@@ -25,9 +25,9 @@ collection = chroma_client.create_collection("yuna_knowledge")
 # Corrected Dropbox file path
 DROPBOX_FOLDER_PATH = "/Apps/YunaGPT-Storage/yuna-docs/"
 
-# Fetch latest notes from Dropbox
-def fetch_latest_dropbox_notes():
-    """Fetches the latest text document from Dropbox."""
+# Fetch latest notes from Dropbox and summarize them
+def fetch_and_summarize_dropbox_notes():
+    """Fetches the latest text document from Dropbox and returns a structured summary."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
         files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
@@ -37,18 +37,39 @@ def fetch_latest_dropbox_notes():
         
         latest_file = sorted(text_files, reverse=True)[0]
         _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
-        return {"file": latest_file, "content": response.content.decode("utf-8")}
+        content = response.content.decode("utf-8")
+        
+        # Summarize document
+        summary = summarize_text(content)
+        
+        return {"file": latest_file, "summary": summary}
     except Exception as e:
         print(f"Dropbox API Error: {e}")
         return {"error": str(e)}
 
+# Summarization function
+def summarize_text(text):
+    """Summarizes the given text using OpenAI GPT-4."""
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Summarize the following document concisely."},
+                {"role": "user", "content": text}
+            ]
+        )
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return f"Error in summarizing document: {str(e)}"
+
 # FastAPI Web App
 app = FastAPI()
 
-@app.get("/fetch_latest_notes")
-def get_latest_notes():
-    """Publicly accessible endpoint to fetch the latest Dropbox notes."""
-    return fetch_latest_dropbox_notes()
+@app.get("/fetch_latest_notes_with_summary")
+def get_latest_notes_with_summary():
+    """Publicly accessible endpoint to fetch the latest Dropbox notes and their summary."""
+    return fetch_and_summarize_dropbox_notes()
 
 @app.on_event("startup")
 async def startup_event():

@@ -100,7 +100,12 @@ def check_upcoming_tasks():
     """Retrieves tasks due within the next 3 days."""
     upcoming_tasks = []
     results = collection.query(n_results=100)
-    for task in results.get("metadatas", []):
+    
+    # Handle empty query results
+    if not results or "metadatas" not in results or not results["metadatas"]:
+        return {"upcoming_tasks": "No tasks found in the database."}
+    
+    for task in results["metadatas"]:
         if "due_date" in task and isinstance(task["due_date"], str):
             try:
                 due_date = datetime.strptime(task["due_date"], "%Y-%m-%d")

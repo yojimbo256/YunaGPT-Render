@@ -55,25 +55,31 @@ def categorize_dropbox_files():
 
 # Task Management in ChromaDB
 def add_task(task, due_date):
-    collection.add(documents=[task], metadatas=[{"due_date": due_date}])
+    collection.add(ids=[str(hash(task))], documents=[task], metadatas=[{"due_date": due_date}])
     return {"message": "Task added successfully."}
 
 def list_tasks():
     results = collection.query(n_results=10)
-    return {"tasks": results}
+    if results and "documents" in results:
+        return {"tasks": results["documents"]}
+    else:
+        return {"error": "No tasks found."}
 
 def delete_task(task):
-    collection.delete(ids=[task])
+    collection.delete(ids=[str(hash(task))])
     return {"message": "Task deleted successfully."}
 
 # Long-Term Memory in ChromaDB
 def remember_interaction(text):
-    collection.add(documents=[text])
+    collection.add(ids=[str(hash(text))], documents=[text])
     return {"message": "Memory stored successfully."}
 
 def recall_memory(query):
     results = collection.query(query_texts=[query], n_results=5)
-    return {"memories": results}
+    if results and "documents" in results:
+        return {"memories": results["documents"]}
+    else:
+        return {"error": "No relevant memories found."}
 
 # OpenAI API Chat Memory
 conversation_history = []

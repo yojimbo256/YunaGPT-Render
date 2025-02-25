@@ -100,9 +100,9 @@ def check_upcoming_tasks():
     """Retrieves tasks due within the next 3 days."""
     upcoming_tasks = []
     
-    # Query for stored tasks
+    # Query for stored tasks using a broad wildcard search
     try:
-        results = collection.query(n_results=100)
+        results = collection.query(query_texts=["*"], n_results=100)
     except Exception as e:
         print(f"ChromaDB Query Error: {e}")
         return {"error": "Failed to retrieve tasks from database."}

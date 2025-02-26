@@ -2,121 +2,109 @@ import os
 import json
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
-import openai
+import requests
 import chromadb
 from chromadb.utils import embedding_functions
 from github import Github
-import requests
-import dropbox
 from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
 
-# Initialize FastAPI app
-app = FastAPI()
+# Initialize FastAPI with lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("\U0001F680 Yuna API has started successfully on Mac Mini!")
+    yield  # Keeps the app running
 
-# Load API Keys from Render Environment Variables
+app = FastAPI(lifespan=lifespan)
+
+# Load API Keys from Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")
-DROPBOX_ACCESS_TOKEN = os.getenv("DROPBOX_ACCESS_TOKEN")
 PORT = int(os.getenv("PORT", 8000))  # Default to 8000 if not set
-
-# Initialize OpenAI Client
-openai.api_key = OPENAI_API_KEY 
 
 # Initialize ChromaDB for Persistent Memory
 chroma_client = chromadb.Client()
 collection = chroma_client.create_collection("yuna_knowledge")
 
-# Corrected Dropbox file path
-DROPBOX_FOLDER_PATH = "/Apps/YunaGPT-Storage/yuna-docs/"
+# Define Local Storage Paths
+LOCAL_MEMORY_PATH = "/usr/local/yuna/yuna_memory.json"
+LOCAL_TASKS_PATH = "/usr/local/yuna/yuna_tasks.json"
+LOCAL_LOG_PATH = "/usr/local/yuna/yuna_log.txt"
 
-# Define Pydantic models for JSON requests
-class DropboxRequest(BaseModel):
-    file_name: str
-    content: str
+# Ensure Files Exist
+for path, default_content in [(LOCAL_MEMORY_PATH, {}), (LOCAL_TASKS_PATH, []), (LOCAL_LOG_PATH, "")]:
+    if not os.path.exists(path):
+        with open(path, "w") as f:
+            json.dump(default_content, f) if isinstance(default_content, dict) or isinstance(default_content, list) else f.write(default_content)
 
-class UpdateDropboxRequest(BaseModel):
-    file_name: str
-    update_content: str
-
+# Define Request Models
 class MemoryUpdateRequest(BaseModel):
     new_memory: str
     category: str  # Allow categorization of memory
 
-class DeleteMemoryRequest(BaseModel):
-    days: int  # Number of days to keep, delete older
+class TaskRequest(BaseModel):
+    task: str
 
-# Define write_to_dropbox to ensure it's available
-def write_to_dropbox(file_name: str, content: str):
-    """Writes or updates a file in Dropbox."""
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
-        dbx.files_upload(content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
-        return {"message": f"Successfully written to {file_name} in Dropbox."}
-    except Exception as e:
-        print(f"Dropbox Write Error: {e}")
-        return {"error": str(e)}
-
-@app.post("/write_to_dropbox")
-def save_to_dropbox(request: DropboxRequest):
-    """Writes or updates a file in Dropbox."""
-    return write_to_dropbox(request.file_name, request.content)
-
-# Update Yuna's persistent memory
+# Memory Management Functions
 def update_yuna_memory(new_memory, category):
-    """Updates Yuna's persistent memory in Dropbox, sorted by category."""
     try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        file_path = f"{DROPBOX_FOLDER_PATH}yuna_memory.json"
-        
-        try:
-            _, response = dbx.files_download(file_path)
-            existing_memory = json.loads(response.content.decode("utf-8"))
-        except dropbox.exceptions.ApiError:
-            existing_memory = {"tasks": [], "summaries": [], "general": []}
-
+        with open(LOCAL_MEMORY_PATH, "r") as f:
+            existing_memory = json.load(f)
         if category not in existing_memory:
             existing_memory[category] = []
-
         existing_memory[category].append({
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "content": new_memory
         })
-
-        dbx.files_upload(json.dumps(existing_memory, indent=4).encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
-        return {"message": "Memory updated successfully in Dropbox."}
+        with open(LOCAL_MEMORY_PATH, "w") as f:
+            json.dump(existing_memory, f, indent=4)
+        return {"message": "Memory updated successfully."}
     except Exception as e:
-        print(f"Memory Update Error: {e}")
         return {"error": str(e)}
 
 @app.post("/update_yuna_memory")
 def save_memory_update(request: MemoryUpdateRequest):
-    """Saves session updates into Yuna's memory."""
     return update_yuna_memory(request.new_memory, request.category)
 
 @app.get("/fetch_yuna_memory")
 def get_yuna_memory(category: str = Query(None)):
-    """Retrieves stored memories from Dropbox with optional category filtering."""
-    return fetch_yuna_memory(category)
+    try:
+        with open(LOCAL_MEMORY_PATH, "r") as f:
+            memory_data = json.load(f)
+        return memory_data if not category else {category: memory_data.get(category, [])}
+    except Exception as e:
+        return {"error": str(e)}
 
-@app.get("/search_memory")
-def search_memory(query: str = Query(...)):
-    return search_yuna_memory(query)
+@app.get("/fetch_tasks")
+def get_tasks():
+    try:
+        with open(LOCAL_TASKS_PATH, "r") as f:
+            tasks = json.load(f)
+        return tasks if tasks else {"message": "No tasks found."}
+    except Exception as e:
+        return {"error": str(e)}
 
-@app.get("/summarize_yuna_memory")
-def get_memory_summary():
-    return summarize_yuna_memory()
+@app.get("/logs")
+def fetch_logs():
+    try:
+        with open(LOCAL_LOG_PATH, "r") as f:
+            logs = f.readlines()
+        return {"logs": logs if logs else ["No logs available."]}
+    except Exception as e:
+        return {"error": str(e)}
 
-@app.post("/delete_old_memories")
-def delete_old_entries(request: DeleteMemoryRequest):
-    """Deletes memories older than a given number of days."""
-    return delete_old_memories(request.days)
+@app.post("/add_task")
+def add_task(request: TaskRequest):
+    try:
+        with open(LOCAL_TASKS_PATH, "r") as f:
+            tasks = json.load(f)
+        tasks.append({"task": request.task, "added": datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        with open(LOCAL_TASKS_PATH, "w") as f:
+            json.dump(tasks, f, indent=4)
+        return {"message": "Task added successfully."}
+    except Exception as e:
+        return {"error": str(e)}
 
-@app.on_event("startup")
-async def startup_event():
-    print("\U0001F680 Yuna API has started successfully on Render!")
-
-# Run FastAPI with Uvicorn
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=PORT, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

@@ -35,54 +35,34 @@ class UpdateDropboxRequest(BaseModel):
     file_name: str
     update_content: str
 
-# Fetch latest notes from Dropbox, prioritize projects.md
-def fetch_latest_notes_with_summary_and_tags():
-    """Fetches `projects.md` from Dropbox if it exists, otherwise fetches the most recent text file."""
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
-        text_files = [file.name for file in files if file.name.endswith(".md") or file.name.endswith(".txt")]
-        
-        if "projects.md" in text_files:
-            latest_file = "projects.md"
-        elif text_files:
-            latest_file = sorted(text_files, reverse=True)[0]
-        else:
-            return {"error": "No text files found in Dropbox."}
-        
-        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
-        content = response.content.decode("utf-8")
-        
-        return {"file": latest_file, "content": content}
-    except Exception as e:
-        print(f"Dropbox API Error: {e}")
-        return {"error": str(e)}
-
-# Auto-delete outdated tasks & projects
-def auto_delete_old_entries():
-    """Deletes tasks and projects older than 30 days."""
+# Retrieve upcoming tasks
+def check_upcoming_tasks():
+    """Retrieves tasks due within the next 3 days."""
+    upcoming_tasks = []
+    
     try:
         results = collection.query(query_texts=["*"], n_results=100)
-        expired_entries = []
-        cutoff_date = datetime.now() - timedelta(days=30)
-
-        for entry in results.get("metadatas", []):
-            if "timestamp" in entry and isinstance(entry["timestamp"], str):
-                try:
-                    entry_date = datetime.strptime(entry["timestamp"], "%Y-%m-%d")
-                    if entry_date < cutoff_date:
-                        expired_entries.append(entry["id"])
-                except ValueError:
-                    continue  # Skip entries with invalid timestamps
-
-        if expired_entries:
-            collection.delete(expired_entries)
-        return {"message": f"Deleted {len(expired_entries)} outdated entries."}
     except Exception as e:
-        print(f"Deletion Error: {e}")
-        return {"error": str(e)}
+        print(f"ChromaDB Query Error: {e}")
+        return {"error": "Failed to retrieve tasks from database."}
+    
+    if not results or "metadatas" not in results or not results["metadatas"]:
+        print("No tasks found in the database.")
+        return {"upcoming_tasks": "No tasks found in the database."}
+    
+    for task in results["metadatas"]:
+        if "due_date" in task and isinstance(task["due_date"], str):
+            try:
+                due_date = datetime.strptime(task["due_date"], "%Y-%m-%d")
+                if due_date <= datetime.now() + timedelta(days=3):
+                    upcoming_tasks.append(task)
+            except ValueError:
+                print(f"Invalid date format in task: {task['due_date']}")
+                continue  # Skip invalid dates
+    
+    return {"upcoming_tasks": upcoming_tasks if upcoming_tasks else "No upcoming tasks found."}
 
-# Scheduled summaries & task reminders
+# Generate scheduled summary
 def generate_scheduled_summary():
     """Generates a daily report of Dropbox updates and upcoming tasks."""
     try:
@@ -117,10 +97,10 @@ def append_to_dropbox(request: UpdateDropboxRequest):
     """Appends updates to an existing Dropbox file."""
     return update_dropbox_file(request.file_name, request.update_content)
 
-@app.post("/auto_delete_old_entries")
-def cleanup_old_entries():
-    """Deletes outdated tasks and projects."""
-    return auto_delete_old_entries()
+@app.post("/check_upcoming_tasks")
+def get_upcoming_tasks():
+    """Lists tasks due within the next 3 days."""
+    return check_upcoming_tasks()
 
 @app.post("/generate_scheduled_summary")
 def run_scheduled_summary():

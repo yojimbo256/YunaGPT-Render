@@ -8,20 +8,24 @@ YunaGPT-Render is an AI-powered assistant that automates task management, docume
 - Reads and writes files to Dropbox.
 - Automatically updates `projects.md` and `tasks.txt`.
 - Saves AI-generated summaries to Dropbox.
+- Stores persistent memories in `yuna_memory.json`.
 
 ### ✅ **Task Management**
 - Stores and retrieves tasks from Dropbox.
 - Checks for upcoming tasks due within 3 days.
 - Appends new tasks instead of overwriting files.
+- Automatically removes outdated tasks.
 
 ### ✅ **AI-Powered Summarization & Memory Recall**
 - Fetches latest notes and projects from Dropbox.
 - Uses OpenAI to summarize and tag documents.
 - Stores summaries and memories in ChromaDB for easy retrieval.
+- Updates `yuna_memory.json` with new insights after each session.
 
-### ✅ **Scheduled Reports**
+### ✅ **Scheduled Reports & Persistent Memory**
 - Generates and saves a `daily_report.md` to Dropbox.
 - Includes latest Dropbox updates and upcoming tasks.
+- Stores session summaries to improve Yuna’s long-term recall.
 
 ## API Endpoints
 ### **📂 Dropbox File Management**
@@ -58,6 +62,18 @@ curl -X POST "https://yunagpt-render.onrender.com/auto_delete_old_entries"
 curl -X POST "https://yunagpt-render.onrender.com/generate_scheduled_summary"
 ```
 
+### **🧠 Persistent Memory**
+#### Update Yuna’s Memory:
+```sh
+curl -X POST "https://yunagpt-render.onrender.com/update_yuna_memory" \
+     -H "Content-Type: application/json" \
+     -d '{"new_memory": "Discussed automating Yuna's memory storage and updates."}'
+```
+#### Retrieve Yuna’s Memory:
+```sh
+curl "https://yunagpt-render.onrender.com/fetch_yuna_memory"
+```
+
 ## Deployment
 ### **🚀 Deploy on Render**
 1. **Clone the repository:**
@@ -80,16 +96,17 @@ curl -X POST "https://yunagpt-render.onrender.com/generate_scheduled_summary"
    ```
 
 ## Future Enhancements
-- **Automated Scheduling**: Run reports and clean up old tasks on a schedule.
-- **Slack/Telegram Integration**: Receive task reminders and summaries via messaging apps.
-- **Voice Commands**: Interact with Yuna using voice commands.
+- **Keyword-Based Memory Search**: Retrieve specific memories based on search queries.
+- **Memory Summarization**: Generate high-level summaries of past sessions.
+- **Automated Memory Cleanup**: Auto-delete outdated memories to keep storage optimized.
+- **AI-Generated Task Suggestions**: Analyze past memory & recommend future actions.
 
 ## License
 This project is licensed under the MIT License.
 
 ## Contributors
-- **[Keith Alexander]** - Developer
+- **Keith Alexander** - Developer
 - **Yuna AI** - Automation & AI Assistant
 
 ---
-
+🚀 **YunaGPT-Render is now fully automated! Ready to take your productivity to the next level?** 🚀

@@ -88,7 +88,7 @@ curl -X POST "https://yunagpt-render.onrender.com/generate_scheduled_summary"
 This project is licensed under the MIT License.
 
 ## Contributors
-- **[Your Name]** - Developer
+- **[Keith Alexander]** - Developer
 - **Yuna AI** - Automation & AI Assistant
 
 ---

@@ -31,63 +31,82 @@ class DropboxRequest(BaseModel):
     file_name: str
     content: str
 
-# List of Active Projects
-PROJECTS_MD = """# Active Projects\n\n## 1️⃣ Yuna – AI Personal Assistant\n✅ Automates Dropbox file management, memory recall, and task tracking.\n✅ Reads & writes to Dropbox.\n✅ Stores and retrieves contextual memory in ChromaDB.\n\n## 2️⃣ DevSecOps AI\n✅ AI-driven cybersecurity automation tool.\n✅ Automates compliance & vulnerability detection.\n\n## 3️⃣ Soteria – Cybersecurity Compliance System\n✅ AI-driven compliance automation & vulnerability management.\n✅ Scans for vulnerabilities (CVE detection).\n\n## 4️⃣ AI-Powered Task & Workflow Automation\n✅ AI-assisted task scheduling and workflow automation.\n✅ Integration with Dropbox & Slack.\n\n## 5️⃣ PhD Research – AI in DevSecOps\n✅ Researching AI-driven compliance automation.\n✅ Building AI-powered threat detection.\n\n## 6️⃣ Custom AI Models\n✅ Development of custom AI models for security and automation.\n✅ Deployment on enterprise infrastructure.\n"""
+class UpdateDropboxRequest(BaseModel):
+    file_name: str
+    update_content: str
 
-PROJECTS_JSON = json.dumps({
-    "projects": [
-        {
-            "name": "Yuna – AI Personal Assistant",
-            "description": "Automates Dropbox file management, memory recall, and task tracking.",
-            "capabilities": ["Reads & writes to Dropbox", "Stores and retrieves memory in ChromaDB"]
-        },
-        {
-            "name": "DevSecOps AI",
-            "description": "AI-driven cybersecurity automation tool.",
-            "capabilities": ["Automates compliance & vulnerability detection"]
-        },
-        {
-            "name": "Soteria – Cybersecurity Compliance System",
-            "description": "AI-driven compliance automation & vulnerability management.",
-            "capabilities": ["Scans for vulnerabilities (CVE detection)"]
-        },
-        {
-            "name": "AI-Powered Task & Workflow Automation",
-            "description": "AI-assisted task scheduling and workflow automation.",
-            "capabilities": ["Integration with Dropbox & Slack"]
-        },
-        {
-            "name": "PhD Research – AI in DevSecOps",
-            "description": "Researching AI-driven compliance automation & threat detection.",
-            "capabilities": ["Building AI-powered threat detection"]
-        },
-        {
-            "name": "Custom AI Models",
-            "description": "Development of custom AI models for security and automation.",
-            "capabilities": ["Deployment on enterprise infrastructure"]
-        }
-    ]
-}, indent=4)
-
-# Write projects to Dropbox
-def write_projects_to_dropbox():
-    """Writes both Markdown and JSON project lists to Dropbox."""
+# Fetch latest notes from Dropbox, prioritize projects.md
+def fetch_latest_notes_with_summary_and_tags():
+    """Fetches `projects.md` from Dropbox if it exists, otherwise fetches the most recent text file."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        dbx.files_upload(PROJECTS_MD.encode("utf-8"), f"{DROPBOX_FOLDER_PATH}projects.md", mode=dropbox.files.WriteMode("overwrite"))
-        dbx.files_upload(PROJECTS_JSON.encode("utf-8"), f"{DROPBOX_FOLDER_PATH}projects.json", mode=dropbox.files.WriteMode("overwrite"))
-        return {"message": "Projects successfully written to Dropbox."}
+        files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
+        text_files = [file.name for file in files if file.name.endswith(".md") or file.name.endswith(".txt")]
+        
+        if "projects.md" in text_files:
+            latest_file = "projects.md"
+        elif text_files:
+            latest_file = sorted(text_files, reverse=True)[0]
+        else:
+            return {"error": "No text files found in Dropbox."}
+        
+        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
+        content = response.content.decode("utf-8")
+        
+        return {"file": latest_file, "content": content}
+    except Exception as e:
+        print(f"Dropbox API Error: {e}")
+        return {"error": str(e)}
+
+# Write content to Dropbox
+def write_to_dropbox(file_name: str, content: str):
+    """Writes or updates a file in Dropbox."""
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
+        dbx.files_upload(content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
+        return {"message": f"Successfully written to {file_name} in Dropbox."}
     except Exception as e:
         print(f"Dropbox Write Error: {e}")
+        return {"error": str(e)}
+
+# Append updates to an existing Dropbox file
+def update_dropbox_file(file_name: str, update_content: str):
+    """Appends new content to an existing Dropbox file, or creates it if it doesn’t exist."""
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
+        try:
+            _, response = dbx.files_download(file_path)
+            existing_content = response.content.decode("utf-8")
+            updated_content = existing_content + "\n" + update_content
+        except dropbox.exceptions.ApiError:
+            print(f"File {file_name} does not exist. Creating a new one.")
+            updated_content = update_content
+        
+        dbx.files_upload(updated_content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
+        return {"message": f"Updated {file_name} in Dropbox."}
+    except Exception as e:
+        print(f"Dropbox Update Error: {e}")
         return {"error": str(e)}
 
 # FastAPI Web App
 app = FastAPI()
 
-@app.post("/write_projects_to_dropbox")
-def save_projects():
-    """Writes project details to Dropbox."""
-    return write_projects_to_dropbox()
+@app.get("/fetch_latest_notes_with_summary_and_tags")
+def get_latest_notes_with_summary_and_tags():
+    """Fetches, prioritizes projects.md, and retrieves Dropbox document."""
+    return fetch_latest_notes_with_summary_and_tags()
+
+@app.post("/write_to_dropbox")
+def save_to_dropbox(request: DropboxRequest):
+    """Writes or updates a file in Dropbox."""
+    return write_to_dropbox(request.file_name, request.content)
+
+@app.post("/update_dropbox_file")
+def append_to_dropbox(request: UpdateDropboxRequest):
+    """Appends updates to an existing Dropbox file."""
+    return update_dropbox_file(request.file_name, request.update_content)
 
 @app.on_event("startup")
 async def startup_event():

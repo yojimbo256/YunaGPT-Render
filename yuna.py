@@ -84,10 +84,33 @@ def update_yuna_memory(new_memory, category):
         print(f"Memory Update Error: {e}")
         return {"error": str(e)}
 
+# Fetch Yuna's memory from Dropbox
+def fetch_yuna_memory(category: str = None):
+    """Fetches stored memory from Dropbox with optional category filtering."""
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        file_path = f"{DROPBOX_FOLDER_PATH}yuna_memory.json"
+        _, response = dbx.files_download(file_path)
+        memory_data = json.loads(response.content.decode("utf-8"))
+
+        if category:
+            return {category: memory_data.get(category, [])}
+        return memory_data
+    except dropbox.exceptions.ApiError:
+        return {"error": "Memory file not found."}
+    except Exception as e:
+        print(f"Memory Fetch Error: {e}")
+        return {"error": str(e)}
+
 @app.post("/update_yuna_memory")
 def save_memory_update(request: MemoryUpdateRequest):
     """Saves session updates into Yuna's memory."""
     return update_yuna_memory(request.new_memory, request.category)
+
+@app.get("/fetch_yuna_memory")
+def get_yuna_memory(category: str = Query(None)):
+    """Retrieves stored memories from Dropbox with optional category filtering."""
+    return fetch_yuna_memory(category)
 
 @app.get("/search_memory")
 def search_memory(query: str = Query(...)):

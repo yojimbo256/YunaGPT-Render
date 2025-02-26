@@ -57,6 +57,11 @@ def write_to_dropbox(file_name: str, content: str):
         print(f"Dropbox Write Error: {e}")
         return {"error": str(e)}
 
+@app.post("/write_to_dropbox")
+def save_to_dropbox(request: DropboxRequest):
+    """Writes or updates a file in Dropbox."""
+    return write_to_dropbox(request.file_name, request.content)
+
 # Update Yuna's persistent memory
 def update_yuna_memory(new_memory, category):
     """Updates Yuna's persistent memory in Dropbox, sorted by category."""
@@ -82,24 +87,6 @@ def update_yuna_memory(new_memory, category):
         return {"message": "Memory updated successfully in Dropbox."}
     except Exception as e:
         print(f"Memory Update Error: {e}")
-        return {"error": str(e)}
-
-# Fetch Yuna's memory from Dropbox
-def fetch_yuna_memory(category: str = None):
-    """Fetches stored memory from Dropbox with optional category filtering."""
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        file_path = f"{DROPBOX_FOLDER_PATH}yuna_memory.json"
-        _, response = dbx.files_download(file_path)
-        memory_data = json.loads(response.content.decode("utf-8"))
-
-        if category:
-            return {category: memory_data.get(category, [])}
-        return memory_data
-    except dropbox.exceptions.ApiError:
-        return {"error": "Memory file not found."}
-    except Exception as e:
-        print(f"Memory Fetch Error: {e}")
         return {"error": str(e)}
 
 @app.post("/update_yuna_memory")

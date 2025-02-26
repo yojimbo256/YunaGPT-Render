@@ -35,27 +35,16 @@ class UpdateDropboxRequest(BaseModel):
     file_name: str
     update_content: str
 
-# Fetch latest notes from Dropbox, prioritize projects.md
-def fetch_latest_notes_with_summary_and_tags():
-    """Fetches `projects.md` from Dropbox if it exists, otherwise fetches the most recent text file."""
+# Define write_to_dropbox to ensure it's available
+def write_to_dropbox(file_name: str, content: str):
+    """Writes or updates a file in Dropbox."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
-        text_files = [file.name for file in files if file.name.endswith(".md") or file.name.endswith(".txt")]
-        
-        if "projects.md" in text_files:
-            latest_file = "projects.md"
-        elif text_files:
-            latest_file = sorted(text_files, reverse=True)[0]
-        else:
-            return {"error": "No text files found in Dropbox."}
-        
-        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
-        content = response.content.decode("utf-8")
-        
-        return {"file": latest_file, "content": content}
+        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
+        dbx.files_upload(content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
+        return {"message": f"Successfully written to {file_name} in Dropbox."}
     except Exception as e:
-        print(f"Dropbox API Error: {e}")
+        print(f"Dropbox Write Error: {e}")
         return {"error": str(e)}
 
 # Retrieve upcoming tasks
@@ -85,18 +74,18 @@ def check_upcoming_tasks():
     
     return {"upcoming_tasks": upcoming_tasks if upcoming_tasks else "No upcoming tasks found."}
 
-# Generate scheduled summary
+# Now define generate_scheduled_summary AFTER write_to_dropbox
 def generate_scheduled_summary():
     """Generates a daily report of Dropbox updates and upcoming tasks."""
     try:
-        notes_response = fetch_latest_notes_with_summary_and_tags()  # Direct function call
+        notes_response = fetch_latest_notes_with_summary_and_tags()
         tasks_response = check_upcoming_tasks()
         
         summary_content = f"### Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n\n"
         summary_content += "#### Dropbox Updates\n" + json.dumps(notes_response, indent=4) + "\n\n"
         summary_content += "#### Upcoming Tasks\n" + json.dumps(tasks_response, indent=4) + "\n"
         
-        write_to_dropbox("daily_report.md", summary_content)
+        write_to_dropbox("daily_report.md", summary_content)  # Now correctly defined
         return {"message": "Daily report generated and saved to Dropbox."}
     except Exception as e:
         print(f"Scheduled Summary Error: {e}")

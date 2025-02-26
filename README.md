@@ -1,4 +1,4 @@
-# YunaGPT-Render
+# Yuna AI Assistant
 
 ## Overview
 Yuna is an AI-powered personal assistant designed to help manage files, tasks, and memories efficiently using **Dropbox, ChromaDB, and OpenAI**. It automates note-taking, project tracking, and scheduled summaries while allowing easy recall of past interactions.

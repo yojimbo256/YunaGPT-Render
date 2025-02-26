@@ -63,8 +63,7 @@ def auto_delete_old_entries():
 def generate_scheduled_summary():
     """Generates a daily report of Dropbox updates and upcoming tasks."""
     try:
-        from yuna import fetch_latest_notes_with_summary_and_tags  # Ensure proper reference
-        notes_response = fetch_latest_notes_with_summary_and_tags()
+        notes_response = fetch_latest_notes_with_summary_and_tags()  # Directly call function
         tasks_response = check_upcoming_tasks()
         
         summary_content = f"### Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n\n"

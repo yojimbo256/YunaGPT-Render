@@ -84,47 +84,10 @@ def update_yuna_memory(new_memory, category):
         print(f"Memory Update Error: {e}")
         return {"error": str(e)}
 
-# Keyword-Based Memory Search
-def search_yuna_memory(query: str):
-    """Searches Yuna's stored memory for specific keywords."""
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        file_path = f"{DROPBOX_FOLDER_PATH}yuna_memory.json"
-        _, response = dbx.files_download(file_path)
-        memory_data = json.loads(response.content.decode("utf-8"))
-        results = []
-
-        for category in memory_data:
-            results.extend([entry for entry in memory_data[category] if query.lower() in entry["content"].lower()])
-
-        return {"results": results}
-    except dropbox.exceptions.ApiError:
-        return {"error": "Memory file not found."}
-    except Exception as e:
-        print(f"Memory Search Error: {e}")
-        return {"error": str(e)}
-
-# Summarize Stored Memory
-def summarize_yuna_memory():
-    """Generates a summary of stored memories."""
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        file_path = f"{DROPBOX_FOLDER_PATH}yuna_memory.json"
-        _, response = dbx.files_download(file_path)
-        memory_data = json.loads(response.content.decode("utf-8"))
-        all_text = "\n".join([entry["content"] for category in memory_data for entry in memory_data[category]])
-
-        summary = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Summarize the following memory data."},
-                {"role": "user", "content": all_text}
-            ]
-        )
-        return {"summary": summary["choices"][0]["message"]["content"]}
-    except Exception as e:
-        print(f"Memory Summarization Error: {e}")
-        return {"error": str(e)}
+@app.post("/update_yuna_memory")
+def save_memory_update(request: MemoryUpdateRequest):
+    """Saves session updates into Yuna's memory."""
+    return update_yuna_memory(request.new_memory, request.category)
 
 @app.get("/search_memory")
 def search_memory(query: str = Query(...)):

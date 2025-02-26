@@ -109,4 +109,3 @@ This project is licensed under the MIT License.
 - **Yuna AI** - Automation & AI Assistant
 
 ---
-🚀 **YunaGPT-Render is now fully automated! Ready to take your productivity to the next level?** 🚀

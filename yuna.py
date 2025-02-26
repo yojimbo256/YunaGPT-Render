@@ -35,6 +35,29 @@ class UpdateDropboxRequest(BaseModel):
     file_name: str
     update_content: str
 
+# Fetch latest notes from Dropbox, prioritize projects.md
+def fetch_latest_notes_with_summary_and_tags():
+    """Fetches `projects.md` from Dropbox if it exists, otherwise fetches the most recent text file."""
+    try:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
+        text_files = [file.name for file in files if file.name.endswith(".md") or file.name.endswith(".txt")]
+        
+        if "projects.md" in text_files:
+            latest_file = "projects.md"
+        elif text_files:
+            latest_file = sorted(text_files, reverse=True)[0]
+        else:
+            return {"error": "No text files found in Dropbox."}
+        
+        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
+        content = response.content.decode("utf-8")
+        
+        return {"file": latest_file, "content": content}
+    except Exception as e:
+        print(f"Dropbox API Error: {e}")
+        return {"error": str(e)}
+
 # Retrieve upcoming tasks
 def check_upcoming_tasks():
     """Retrieves tasks due within the next 3 days."""

@@ -39,7 +39,7 @@ class UpdateDropboxRequest(BaseModel):
 def auto_delete_old_entries():
     """Deletes tasks and projects older than 30 days."""
     try:
-        results = collection.query(n_results=100)
+        results = collection.query(query_texts=["*"], n_results=100)
         expired_entries = []
         cutoff_date = datetime.now() - timedelta(days=30)
 
@@ -63,6 +63,7 @@ def auto_delete_old_entries():
 def generate_scheduled_summary():
     """Generates a daily report of Dropbox updates and upcoming tasks."""
     try:
+        from yuna import fetch_latest_notes_with_summary_and_tags  # Ensure proper reference
         notes_response = fetch_latest_notes_with_summary_and_tags()
         tasks_response = check_upcoming_tasks()
         

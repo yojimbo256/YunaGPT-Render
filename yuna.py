@@ -10,6 +10,9 @@ import requests
 import dropbox
 from datetime import datetime, timedelta
 
+# Initialize FastAPI app
+app = FastAPI()
+
 # Load API Keys from Render Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN")

@@ -26,7 +26,7 @@ collection = chroma_client.create_collection("yuna_knowledge")
 # Corrected Dropbox file path
 DROPBOX_FOLDER_PATH = "/Apps/YunaGPT-Storage/yuna-docs/"
 
-# Define Pydantic model for JSON requests
+# Define Pydantic models for JSON requests
 class DropboxRequest(BaseModel):
     file_name: str
     content: str
@@ -35,59 +35,45 @@ class UpdateDropboxRequest(BaseModel):
     file_name: str
     update_content: str
 
-# Fetch latest notes from Dropbox, prioritize projects.md
-def fetch_latest_notes_with_summary_and_tags():
-    """Fetches `projects.md` from Dropbox if it exists, otherwise fetches the most recent text file."""
+# Auto-delete outdated tasks & projects
+def auto_delete_old_entries():
+    """Deletes tasks and projects older than 30 days."""
     try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
-        text_files = [file.name for file in files if file.name.endswith(".md") or file.name.endswith(".txt")]
-        
-        if "projects.md" in text_files:
-            latest_file = "projects.md"
-        elif text_files:
-            latest_file = sorted(text_files, reverse=True)[0]
-        else:
-            return {"error": "No text files found in Dropbox."}
-        
-        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
-        content = response.content.decode("utf-8")
-        
-        return {"file": latest_file, "content": content}
+        results = collection.query(n_results=100)
+        expired_entries = []
+        cutoff_date = datetime.now() - timedelta(days=30)
+
+        for entry in results.get("metadatas", []):
+            if "timestamp" in entry and isinstance(entry["timestamp"], str):
+                try:
+                    entry_date = datetime.strptime(entry["timestamp"], "%Y-%m-%d")
+                    if entry_date < cutoff_date:
+                        expired_entries.append(entry["id"])
+                except ValueError:
+                    continue  # Skip entries with invalid timestamps
+
+        if expired_entries:
+            collection.delete(expired_entries)
+        return {"message": f"Deleted {len(expired_entries)} outdated entries."}
     except Exception as e:
-        print(f"Dropbox API Error: {e}")
+        print(f"Deletion Error: {e}")
         return {"error": str(e)}
 
-# Write content to Dropbox
-def write_to_dropbox(file_name: str, content: str):
-    """Writes or updates a file in Dropbox."""
+# Scheduled summaries & task reminders
+def generate_scheduled_summary():
+    """Generates a daily report of Dropbox updates and upcoming tasks."""
     try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
-        dbx.files_upload(content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
-        return {"message": f"Successfully written to {file_name} in Dropbox."}
-    except Exception as e:
-        print(f"Dropbox Write Error: {e}")
-        return {"error": str(e)}
-
-# Append updates to an existing Dropbox file
-def update_dropbox_file(file_name: str, update_content: str):
-    """Appends new content to an existing Dropbox file, or creates it if it doesn’t exist."""
-    try:
-        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        file_path = f"{DROPBOX_FOLDER_PATH}{file_name}"
-        try:
-            _, response = dbx.files_download(file_path)
-            existing_content = response.content.decode("utf-8")
-            updated_content = existing_content + "\n" + update_content
-        except dropbox.exceptions.ApiError:
-            print(f"File {file_name} does not exist. Creating a new one.")
-            updated_content = update_content
+        notes_response = fetch_latest_notes_with_summary_and_tags()
+        tasks_response = check_upcoming_tasks()
         
-        dbx.files_upload(updated_content.encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
-        return {"message": f"Updated {file_name} in Dropbox."}
+        summary_content = f"### Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n\n"
+        summary_content += "#### Dropbox Updates\n" + json.dumps(notes_response, indent=4) + "\n\n"
+        summary_content += "#### Upcoming Tasks\n" + json.dumps(tasks_response, indent=4) + "\n"
+        
+        write_to_dropbox("daily_report.md", summary_content)
+        return {"message": "Daily report generated and saved to Dropbox."}
     except Exception as e:
-        print(f"Dropbox Update Error: {e}")
+        print(f"Scheduled Summary Error: {e}")
         return {"error": str(e)}
 
 # FastAPI Web App
@@ -107,6 +93,16 @@ def save_to_dropbox(request: DropboxRequest):
 def append_to_dropbox(request: UpdateDropboxRequest):
     """Appends updates to an existing Dropbox file."""
     return update_dropbox_file(request.file_name, request.update_content)
+
+@app.post("/auto_delete_old_entries")
+def cleanup_old_entries():
+    """Deletes outdated tasks and projects."""
+    return auto_delete_old_entries()
+
+@app.post("/generate_scheduled_summary")
+def run_scheduled_summary():
+    """Runs the scheduled summary and task reminder process."""
+    return generate_scheduled_summary()
 
 @app.on_event("startup")
 async def startup_event():

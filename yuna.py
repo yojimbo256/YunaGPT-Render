@@ -35,6 +35,9 @@ class UpdateDropboxRequest(BaseModel):
     file_name: str
     update_content: str
 
+class MemoryUpdateRequest(BaseModel):
+    new_memory: str
+
 # Define write_to_dropbox to ensure it's available
 def write_to_dropbox(file_name: str, content: str):
     """Writes or updates a file in Dropbox."""
@@ -47,75 +50,56 @@ def write_to_dropbox(file_name: str, content: str):
         print(f"Dropbox Write Error: {e}")
         return {"error": str(e)}
 
-# Fetch latest notes from Dropbox, prioritize projects.md
-def fetch_latest_notes_with_summary_and_tags():
-    """Fetches `projects.md` from Dropbox if it exists, otherwise fetches the most recent text file."""
+# Update Yuna's persistent memory
+def update_yuna_memory(new_memory):
+    """Updates Yuna's persistent memory in Dropbox."""
     try:
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-        files = dbx.files_list_folder(DROPBOX_FOLDER_PATH).entries
-        text_files = [file.name for file in files if file.name.endswith(".md") or file.name.endswith(".txt")]
+        file_path = f"{DROPBOX_FOLDER_PATH}yuna_memory.json"
         
-        if "projects.md" in text_files:
-            latest_file = "projects.md"
-        elif text_files:
-            latest_file = sorted(text_files, reverse=True)[0]
-        else:
-            return {"error": "No text files found in Dropbox."}
-        
-        _, response = dbx.files_download(f"{DROPBOX_FOLDER_PATH}{latest_file}")
-        content = response.content.decode("utf-8")
-        
-        return {"file": latest_file, "content": content}
+        try:
+            _, response = dbx.files_download(file_path)
+            existing_memory = json.loads(response.content.decode("utf-8"))
+        except dropbox.exceptions.ApiError:
+            existing_memory = {"memories": []}
+
+        existing_memory["memories"].append({
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "content": new_memory
+        })
+
+        dbx.files_upload(json.dumps(existing_memory, indent=4).encode("utf-8"), file_path, mode=dropbox.files.WriteMode("overwrite"))
+        return {"message": "Memory updated successfully in Dropbox."}
     except Exception as e:
-        print(f"Dropbox API Error: {e}")
+        print(f"Memory Update Error: {e}")
         return {"error": str(e)}
 
-# Retrieve upcoming tasks
-def check_upcoming_tasks():
-    """Retrieves tasks due within the next 3 days."""
-    upcoming_tasks = []
-    
+# Fetch Yuna's memory from Dropbox
+def fetch_yuna_memory():
+    """Fetches stored memory from Dropbox."""
     try:
-        results = collection.query(query_texts=["*"], n_results=100)
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        file_path = f"{DROPBOX_FOLDER_PATH}yuna_memory.json"
+        _, response = dbx.files_download(file_path)
+        return json.loads(response.content.decode("utf-8"))
+    except dropbox.exceptions.ApiError:
+        return {"error": "Memory file not found."}
     except Exception as e:
-        print(f"ChromaDB Query Error: {e}")
-        return {"error": "Failed to retrieve tasks from database."}
-    
-    if not results or "metadatas" not in results or not results["metadatas"]:
-        print("No tasks found in the database.")
-        return {"upcoming_tasks": "No tasks found in the database."}
-    
-    for task in results["metadatas"]:
-        if "due_date" in task and isinstance(task["due_date"], str):
-            try:
-                due_date = datetime.strptime(task["due_date"], "%Y-%m-%d")
-                if due_date <= datetime.now() + timedelta(days=3):
-                    upcoming_tasks.append(task)
-            except ValueError:
-                print(f"Invalid date format in task: {task['due_date']}")
-                continue  # Skip invalid dates
-    
-    return {"upcoming_tasks": upcoming_tasks if upcoming_tasks else "No upcoming tasks found."}
-
-# Now define generate_scheduled_summary AFTER write_to_dropbox and fetch_latest_notes_with_summary_and_tags
-def generate_scheduled_summary():
-    """Generates a daily report of Dropbox updates and upcoming tasks."""
-    try:
-        notes_response = fetch_latest_notes_with_summary_and_tags()
-        tasks_response = check_upcoming_tasks()
-        
-        summary_content = f"### Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n\n"
-        summary_content += "#### Dropbox Updates\n" + json.dumps(notes_response, indent=4) + "\n\n"
-        summary_content += "#### Upcoming Tasks\n" + json.dumps(tasks_response, indent=4) + "\n"
-        
-        write_to_dropbox("daily_report.md", summary_content)  # Now correctly defined
-        return {"message": "Daily report generated and saved to Dropbox."}
-    except Exception as e:
-        print(f"Scheduled Summary Error: {e}")
+        print(f"Memory Fetch Error: {e}")
         return {"error": str(e)}
 
 # FastAPI Web App
 app = FastAPI()
+
+@app.post("/update_yuna_memory")
+def save_memory_update(request: MemoryUpdateRequest):
+    """Saves session updates into Yuna's memory."""
+    return update_yuna_memory(request.new_memory)
+
+@app.get("/fetch_yuna_memory")
+def get_yuna_memory():
+    """Retrieves stored memories from Dropbox."""
+    return fetch_yuna_memory()
 
 @app.get("/fetch_latest_notes_with_summary_and_tags")
 def get_latest_notes_with_summary_and_tags():
@@ -131,11 +115,6 @@ def save_to_dropbox(request: DropboxRequest):
 def append_to_dropbox(request: UpdateDropboxRequest):
     """Appends updates to an existing Dropbox file."""
     return update_dropbox_file(request.file_name, request.update_content)
-
-@app.post("/check_upcoming_tasks")
-def get_upcoming_tasks():
-    """Lists tasks due within the next 3 days."""
-    return check_upcoming_tasks()
 
 @app.post("/generate_scheduled_summary")
 def run_scheduled_summary():

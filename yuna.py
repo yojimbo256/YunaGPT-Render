@@ -1,137 +1,165 @@
 import os
 import json
 import asyncio
+import sqlite3
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 import chromadb
 from chromadb.utils import embedding_functions
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+from rapidfuzz import fuzz
 
 # Initialize FastAPI with lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("\U0001F680 Yuna API has started successfully on Mac Mini!")
-    yield  # Keeps the app running
+    print("\U0001F680 Yuna API has started successfully with iCloud Drive storage!")
+    yield
 
 app = FastAPI(lifespan=lifespan)
 
 # Load API Keys from Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN", "")
-try:
-    PORT = int(os.getenv("PORT", "8000"))  # Default to 8000 if not set
-except ValueError:
-    PORT = 8000  # Fallback to default
+PORT = int(os.getenv("PORT", "8000"))
 
-# Initialize ChromaDB for Persistent Memory
-chroma_client = chromadb.PersistentClient(path="/usr/local/yuna/chroma_db")  # Persistent storage
+# Initialize ChromaDB for Vector Search
+chroma_client = chromadb.PersistentClient(path="/Users/yojimbo256/Yuna-AI/chroma_db")
 collection = chroma_client.get_or_create_collection("yuna_knowledge")
 
-# Define Local Storage Paths
-LOCAL_MEMORY_PATH = "/usr/local/yuna/yuna_memory.json"
-LOCAL_TASKS_PATH = "/usr/local/yuna/yuna_tasks.json"
-LOCAL_LOG_PATH = "/usr/local/yuna/yuna_log.txt"
+# Define Storage Paths
+ICLOUD_STORAGE_PATH = "/Users/yojimbo256/Library/Mobile Documents/com~apple~CloudDocs/Yuna-AI"
+SHORT_TERM_MEMORY_PATH = f"{ICLOUD_STORAGE_PATH}/short_term_memory.json"
+LONG_TERM_MEMORY_DB = f"{ICLOUD_STORAGE_PATH}/long_term_memory.db"
 
-# Ensure Files Exist
-def ensure_file_exists(path, default_content):
-    """Ensure that required files exist with default content if missing."""
+# Ensure JSON File Exists for Short-Term Memory
+def ensure_json_file_exists(path, default_content):
     if not os.path.exists(path):
         with open(path, "w") as f:
-            json.dump(default_content, f, indent=4) if isinstance(default_content, (dict, list)) else f.write(default_content)
+            json.dump(default_content, f, indent=4)
 
-ensure_file_exists(LOCAL_MEMORY_PATH, {})
-ensure_file_exists(LOCAL_TASKS_PATH, [])
-ensure_file_exists(LOCAL_LOG_PATH, "")
+ensure_json_file_exists(SHORT_TERM_MEMORY_PATH, {})
 
-# Define Request Models
+# SQLite for Long-Term Memory
+def init_long_term_memory():
+    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS memories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            content TEXT,
+            category TEXT,
+            summary TEXT,
+            permanent INTEGER DEFAULT 0
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_category ON memories(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON memories(timestamp)")
+    conn.commit()
+    conn.close()
+
+init_long_term_memory()
+
+# Request Models
 class MemoryUpdateRequest(BaseModel):
     new_memory: str
-    category: str  # Allow categorization of memory
-
-class TaskRequest(BaseModel):
-    task: str
-    priority: str = "normal"  # low, normal, high
-    due_date: str = None  # Optional deadline
-    status: str = "pending"  # pending, completed
+    category: str
+    permanent: bool = False
 
 # Async File Handling
-async def read_json_file(file_path, default):
+async def read_json(file_path):
     """Read JSON file asynchronously, handling errors."""
     try:
         if os.path.exists(file_path):
-            async with asyncio.to_thread(open, file_path, "r") as f:
-                return json.load(f)
-        return default
+            return await asyncio.to_thread(lambda: json.load(open(file_path, "r")))
+        return {}
     except (json.JSONDecodeError, FileNotFoundError):
-        return default
+        return {}
 
-async def write_json_file(file_path, data):
-    """Write JSON file asynchronously."""
-    async with asyncio.to_thread(open, file_path, "w") as f:
-        json.dump(data, f, indent=4)
+async def write_json(file_path, data):
+    await asyncio.to_thread(lambda: json.dump(data, open(file_path, "w"), indent=4))
+
+# Generate Memory Summary
+def generate_summary(memories):
+    """Summarizes a list of memories before deletion."""
+    return " ".join(mem["content"] for mem in memories[-5:]) if memories else ""
 
 # Memory Management
 @app.post("/update_yuna_memory")
 async def save_memory_update(request: MemoryUpdateRequest):
-    existing_memory = await read_json_file(LOCAL_MEMORY_PATH, {})
+    existing_memory = await read_json(SHORT_TERM_MEMORY_PATH)
     
     if request.category not in existing_memory:
         existing_memory[request.category] = []
     
-    existing_memory[request.category].append({
+    new_entry = {
         "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         "content": request.new_memory
-    })
+    }
+    existing_memory[request.category].append(new_entry)
+    await write_json(SHORT_TERM_MEMORY_PATH, existing_memory)
     
-    await write_json_file(LOCAL_MEMORY_PATH, existing_memory)
+    # Save to Long-Term Memory if marked permanent
+    if request.permanent:
+        conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO memories (timestamp, content, category, permanent) VALUES (?, ?, ?, 1)",
+                       (new_entry["timestamp"], request.new_memory, request.category))
+        conn.commit()
+        conn.close()
+    
     return {"message": "Memory updated successfully."}
 
 @app.get("/fetch_yuna_memory")
 async def get_yuna_memory(category: str = Query(None)):
-    memory_data = await read_json_file(LOCAL_MEMORY_PATH, {})
-    return memory_data if not category else {category: memory_data.get(category, [])}
+    short_term_memory = await read_json(SHORT_TERM_MEMORY_PATH)
+    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
+    cursor = conn.cursor()
+    
+    if category:
+        cursor.execute("SELECT timestamp, content FROM memories WHERE category = ?", (category,))
+        long_term_memory = cursor.fetchall()
+        conn.close()
+        return {"short_term": short_term_memory.get(category, []), "long_term": long_term_memory}
+    
+    cursor.execute("SELECT timestamp, content FROM memories")
+    long_term_memory = cursor.fetchall()
+    conn.close()
+    return {"short_term": short_term_memory, "long_term": long_term_memory}
 
-# Task Management
-@app.get("/fetch_tasks")
-async def get_tasks():
-    tasks = await read_json_file(LOCAL_TASKS_PATH, [])
-    return tasks if tasks else {"message": "No tasks found."}
+# Memory Cleanup
+@app.post("/delete_old_memories")
+async def delete_old_memories(days: int = 30):
+    cutoff = datetime.now() - timedelta(days=days)
+    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, content, category FROM memories WHERE timestamp < ? AND permanent = 0", (cutoff.strftime('%Y-%m-%d %H:%M:%S'),))
+    old_memories = cursor.fetchall()
+    
+    if old_memories:
+        summary = generate_summary([{"content": mem[1]} for mem in old_memories])
+        cursor.execute("INSERT INTO memories (timestamp, content, category, permanent) VALUES (?, ?, ?, 1)",
+                       (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), summary, "summary"))
+    
+    cursor.execute("DELETE FROM memories WHERE timestamp < ? AND permanent = 0", (cutoff.strftime('%Y-%m-%d %H:%M:%S'),))
+    conn.commit()
+    conn.close()
+    return {"message": f"Deleted non-permanent memories older than {days} days."}
 
-@app.post("/add_task")
-async def add_task(request: TaskRequest):
-    tasks = await read_json_file(LOCAL_TASKS_PATH, [])
-    task_entry = {
-        "task": request.task,
-        "priority": request.priority,
-        "due_date": request.due_date,
-        "status": request.status,
-        "added": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-    tasks.append(task_entry)
-    await write_json_file(LOCAL_TASKS_PATH, tasks)
-    return {"message": "Task added successfully."}
+# Fuzzy Search
+@app.get("/search_yuna_memory")
+async def search_yuna_memory(query: str):
+    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
+    cursor = conn.cursor()
+    cursor.execute("SELECT timestamp, content FROM memories")
+    all_memories = cursor.fetchall()
+    conn.close()
+    
+    results = [mem for mem in all_memories if fuzz.partial_ratio(query, mem[1]) > 70]
+    return {"matches": results}
 
-@app.post("/update_task_status")
-async def update_task_status(index: int, new_status: str):
-    tasks = await read_json_file(LOCAL_TASKS_PATH, [])
-    if 0 <= index < len(tasks):
-        tasks[index]["status"] = new_status
-        await write_json_file(LOCAL_TASKS_PATH, tasks)
-        return {"message": f"Task {index} updated to {new_status}."}
-    return {"error": "Invalid task index."}
-
-# Log Management
-@app.get("/logs")
-async def fetch_logs():
-    try:
-        async with asyncio.to_thread(open, LOCAL_LOG_PATH, "r") as f:
-            logs = f.readlines()
-        return {"logs": logs if logs else ["No logs available."]}
-    except FileNotFoundError:
-        return {"logs": ["No logs available."]}
-
-# Run FastAPI with Uvicorn
+# Start FastAPI Server
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)

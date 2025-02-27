@@ -1,82 +1,74 @@
 # Yuna AI Assistant
 
 ## Overview
-Yuna is an AI-powered personal assistant designed to help manage files, tasks, and memories efficiently using **Dropbox, ChromaDB, and OpenAI**. It automates note-taking, project tracking, and scheduled summaries while allowing easy recall of past interactions.
+Yuna is an AI-powered personal assistant designed to help manage files, tasks, and memories efficiently using **SQLite, ChromaDB, and OpenAI**. It automates note-taking, project tracking, and scheduled summaries while allowing easy recall of past interactions.
 
 ## Features
 
-### 🗂 **Dropbox File Management**
-- **Fetch Latest Notes:** Retrieve the most recent notes and summaries.
+### 🗂 **File & Memory Management**
+- **Fetch Latest Memories:** Retrieve the most recent stored memories.
   ```sh
-  curl "https://yunagpt-render.onrender.com/fetch_latest_notes_with_summary_and_tags"
+  curl "http://127.0.0.1:8000/fetch_yuna_memory"
   ```
-- **Write a New File to Dropbox:**
+- **Store a New Memory Entry:**
   ```sh
-  curl -X POST "https://yunagpt-render.onrender.com/write_to_dropbox" \
+  curl -X POST "http://127.0.0.1:8000/update_yuna_memory" \
        -H "Content-Type: application/json" \
-       -d '{"file_name": "tasks.txt", "content": "Complete final edits on Yuna."}'
+       -d '{"new_memory": "Meeting notes", "category": "work", "permanent": true}'
   ```
-- **Update an Existing File in Dropbox:**
+- **Search Memory Using Fuzzy Matching:**
   ```sh
-  curl -X POST "https://yunagpt-render.onrender.com/update_dropbox_file" \
+  curl "http://127.0.0.1:8000/search_yuna_memory?query=project"
+  ```
+- **Delete Old Non-Permanent Memories:**
+  ```sh
+  curl -X POST "http://127.0.0.1:8000/delete_old_memories" \
        -H "Content-Type: application/json" \
-       -d '{"file_name": "tasks.txt", "update_content": "Added another task: Review AI model improvements."}'
+       -d '{"days": 30}'
   ```
 
 ### 📋 **Task Management**
-- **Check Upcoming Tasks:**
+- **Check Stored Tasks:**
   ```sh
-  curl "https://yunagpt-render.onrender.com/check_upcoming_tasks"
+  curl "http://127.0.0.1:8000/fetch_tasks"
   ```
-- **Auto-Delete Old Tasks & Projects:**
+- **Add a Task:**
   ```sh
-  curl -X POST "https://yunagpt-render.onrender.com/auto_delete_old_entries"
+  curl -X POST "http://127.0.0.1:8000/add_task" \
+       -H "Content-Type: application/json" \
+       -d '{"task": "Finish Yuna documentation", "priority": "high", "due_date": "2025-03-01"}'
+  ```
+- **Update Task Status:**
+  ```sh
+  curl -X POST "http://127.0.0.1:8000/update_task_status" \
+       -H "Content-Type: application/json" \
+       -d '{"index": 0, "new_status": "completed"}'
   ```
 
 ### 📊 **Reports & Summaries**
 - **Generate a Daily Report:**
   ```sh
-  curl -X POST "https://yunagpt-render.onrender.com/generate_scheduled_summary"
+  curl -X POST "http://127.0.0.1:8000/generate_scheduled_summary"
   ```
-- **Structured Summaries of Dropbox Files:**
+- **Retrieve Logs:**
   ```sh
-  curl "https://yunagpt-render.onrender.com/structured_summarize_dropbox_doc?file=notes.txt"
-  ```
-
-### 🧠 **Memory Recall & AI Contextual Awareness**
-- **Search Memory for Context:**
-  ```sh
-  curl "https://yunagpt-render.onrender.com/search_memory?query=project"
-  ```
-- **Retrieve Related Memories:**
-  ```sh
-  curl "https://yunagpt-render.onrender.com/contextual_memory_recall?query=project"
-  ```
-- **Summarize Yuna's Stored Memories:**
-  ```sh
-  curl "https://yunagpt-render.onrender.com/summarize_yuna_memory"
-  ```
-- **Delete Memories Older than 30 Days:**
-  ```sh
-  curl -X POST "https://yunagpt-render.onrender.com/delete_old_memories" \
-       -H "Content-Type: application/json" \
-       -d '{"days": 30}'
+  curl "http://127.0.0.1:8000/logs"
   ```
 
 ### 🛠 **Automated Workflows & Background Automation**
-- **Automate Workflow with Background Scripts**
-  - Set up a background automation script to trigger tasks based on ChatGPT usage:
+- **Automate Workflow with Startup Script**
+  - Set up Yuna to start automatically using login items:
     ```sh
-    @reboot python3 "/Users/yojimbo256/Python Scripts/yuna_automation.py" &
-    0 */3 * * * python3 "/Users/yojimbo256/Python Scripts/yuna_automation.py" >> /Users/yojimbo256/yuna_log.txt 2>&1 &
+    chmod +x ~/start_yuna.sh
     ```
+  - Add `~/start_yuna.sh` to macOS login items.
 
 ## Installation & Setup
 ### 🚀 **Running Yuna Locally**
 1. **Clone the Repository**
    ```sh
-   git clone https://github.com/yojimbo256/YunaGPT-Render.git
-   cd YunaGPT-Render
+   git clone https://github.com/yojimbo256/Yuna-AI.git
+   cd Yuna-AI
    ```
 2. **Install Dependencies**
    ```sh
@@ -92,16 +84,14 @@ Set the following environment variables:
 ```
 OPENAI_API_KEY=<your_openai_api_key>
 GITHUB_ACCESS_TOKEN=<your_github_token>
-DROPBOX_ACCESS_TOKEN=<your_dropbox_token>
 PORT=8000
 ```
 
 ## Roadmap 🚀
-- [ ] Auto-delete outdated tasks & projects.
-- [ ] Sync tasks between Dropbox & ChromaDB.
-- [ ] Enable version control for Dropbox files.
-- [ ] Integrate real-time AI assistance via voice commands.
+- [ ] Improve auto-start mechanism.
+- [ ] Enhance memory summarization before deletion.
+- [ ] Implement SQLite query optimization for faster recall.
+- [ ] Add voice command support.
 
 ## License 📜
 MIT License. See `LICENSE` for more details.
-

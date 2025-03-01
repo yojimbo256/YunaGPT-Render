@@ -2,7 +2,8 @@ import os
 import json
 import asyncio
 import sqlite3
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
+import subprocess
 from pydantic import BaseModel
 import chromadb
 from chromadb.utils import embedding_functions
@@ -16,7 +17,7 @@ async def lifespan(app: FastAPI):
     print("\U0001F680 Yuna API has started successfully with iCloud Drive storage!")
     yield
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 # Load API Keys from Environment Variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -24,13 +25,13 @@ GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN", "")
 PORT = int(os.getenv("PORT", "8000"))
 
 # Initialize ChromaDB for Vector Search
-chroma_client = chromadb.PersistentClient(path="/Users/yojimbo256/Yuna-AI/chroma_db")
+chroma_client = chromadb.PersistentClient(path="/home/yojimbo256/Yuna-AI/chroma_db")
 collection = chroma_client.get_or_create_collection("yuna_knowledge")
 
 # Define Storage Paths
-ICLOUD_STORAGE_PATH = "/Users/yojimbo256/Library/Mobile Documents/com~apple~CloudDocs/Yuna-AI"
-SHORT_TERM_MEMORY_PATH = f"{ICLOUD_STORAGE_PATH}/short_term_memory.json"
-LONG_TERM_MEMORY_DB = f"{ICLOUD_STORAGE_PATH}/long_term_memory.db"
+LINUX_STORAGE_PATH = "/home/yojimbo256/Yuna-AI/data"
+SHORT_TERM_MEMORY_PATH = f"{LINUX_STORAGE_PATH}/short_term_memory.json"
+LONG_TERM_MEMORY_DB = f"{LINUX_STORAGE_PATH}/long_term_memory.db"
 
 # Ensure JSON File Exists for Short-Term Memory
 def ensure_json_file_exists(path, default_content):
@@ -39,6 +40,7 @@ def ensure_json_file_exists(path, default_content):
             json.dump(default_content, f, indent=4)
 
 ensure_json_file_exists(SHORT_TERM_MEMORY_PATH, {})
+os.makedirs(LINUX_STORAGE_PATH, exist_ok=True)
 
 # SQLite for Long-Term Memory
 def init_long_term_memory():
@@ -158,6 +160,21 @@ async def search_yuna_memory(query: str):
     
     results = [mem for mem in all_memories if fuzz.partial_ratio(query, mem[1]) > 70]
     return {"matches": results}
+
+@app.post("/chat")
+async def chat(request: Request):
+    data = await request.json()
+    user_message = data.get("message")
+
+    # Run local LLM using Ollama
+    response = subprocess.run(
+        ["ollama", "run", "mistral"],
+        input=user_message,
+        text=True,
+        capture_output=True
+    )
+
+    return {"response": response.stdout}
 
 # Start FastAPI Server
 if __name__ == "__main__":

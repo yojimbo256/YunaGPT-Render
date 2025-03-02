@@ -28,10 +28,17 @@ PORT = int(os.getenv("PORT", "8000"))
 chroma_client = chromadb.PersistentClient(path="/home/yojimbo256/Yuna-AI/chroma_db")
 collection = chroma_client.get_or_create_collection("yuna_knowledge")
 
-# Define Storage Paths
-LINUX_STORAGE_PATH = "/home/yojimbo256/Yuna-AI/data"
-SHORT_TERM_MEMORY_PATH = f"{LINUX_STORAGE_PATH}/short_term_memory.json"
-LONG_TERM_MEMORY_DB = f"{LINUX_STORAGE_PATH}/long_term_memory.db"
+import os
+
+# WSL File Storage Path (Inside the Ubuntu Subsystem)
+WSL_STORAGE_PATH = "/home/yojimbo256/Yuna-AI/data"  # Adjust if needed
+
+# Define Paths for Short-Term Memory & Database
+SHORT_TERM_MEMORY_PATH = os.path.join(WSL_STORAGE_PATH, "short_term_memory.json")
+LONG_TERM_MEMORY_DB = os.path.join(WSL_STORAGE_PATH, "long_term_memory.db")
+
+# Ensure storage directory exists
+os.makedirs(WSL_STORAGE_PATH, exist_ok=True)
 
 # Ensure JSON File Exists for Short-Term Memory
 def ensure_json_file_exists(path, default_content):
@@ -40,7 +47,7 @@ def ensure_json_file_exists(path, default_content):
             json.dump(default_content, f, indent=4)
 
 ensure_json_file_exists(SHORT_TERM_MEMORY_PATH, {})
-os.makedirs(LINUX_STORAGE_PATH, exist_ok=True)
+os.makedirs(WSL_STORAGE_PATH, exist_ok=True)
 
 # SQLite for Long-Term Memory
 def init_long_term_memory():
@@ -119,16 +126,21 @@ async def get_yuna_memory(category: str = Query(None)):
     conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
     cursor = conn.cursor()
     
+    # ✅ Fetch long-term memory from SQLite
     if category:
         cursor.execute("SELECT timestamp, content FROM memories WHERE category = ?", (category,))
         long_term_memory = cursor.fetchall()
-        conn.close()
-        return {"short_term": short_term_memory.get(category, []), "long_term": long_term_memory}
+    else:
+        cursor.execute("SELECT timestamp, content FROM memories")
+        long_term_memory = cursor.fetchall()
     
-    cursor.execute("SELECT timestamp, content FROM memories")
-    long_term_memory = cursor.fetchall()
     conn.close()
-    return {"short_term": short_term_memory, "long_term": long_term_memory}
+
+    return {
+        "short_term": short_term_memory.get(category, []),
+        "long_term": [{"timestamp": row[0], "content": row[1]} for row in long_term_memory]
+    }
+
 
 # Memory Cleanup
 @app.post("/delete_old_memories")

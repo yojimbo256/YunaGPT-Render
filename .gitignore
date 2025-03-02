@@ -169,3 +169,41 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# -------------------
+# Existing Git Ignore Rules
+# -------------------
+# (Keep your existing rules here)
+
+# -------------------
+# Yuna AI Project-Specific Exclusions
+# -------------------
+
+# Local runtime data
+data/
+logs/
+models/
+*.log
+
+# Exclude SQLite databases (long-term memory storage)
+*.sqlite3
+*.sqlite3-journal
+data/long_term_memory.db
+data/short_term_memory.json
+data/yuna_memory.json
+data/yuna_tasks.json
+data/yuna_log.txt
+
+# Virtual Environment (DO NOT COMMIT)
+yuna-venv/
+venv/
+.env
+.venv
+env/
+ENV/
+
+# Python bytecode & cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

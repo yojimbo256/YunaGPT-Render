@@ -2,193 +2,85 @@ import os
 import json
 import asyncio
 import sqlite3
-from fastapi import FastAPI, Query, Request
-import subprocess
-from pydantic import BaseModel
-import chromadb
-from chromadb.utils import embedding_functions
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
+import subprocess
+
+from fastapi import FastAPI, Query, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from rapidfuzz import fuzz
 
-# Initialize FastAPI with lifespan
+from memory import store_conversation, get_recent_conversations, delete_old_conversations
+
+# === ✅ FastAPI App Initialization ===
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("\U0001F680 Yuna API has started successfully with iCloud Drive storage!")
+    print("\U0001F680 Yuna API has started successfully!")
     yield
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
-# Load API Keys from Environment Variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-GITHUB_ACCESS_TOKEN = os.getenv("GITHUB_ACCESS_TOKEN", "")
+# === ✅ CORS Middleware ===
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://yuna-web.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# === ✅ Environment Variables ===
 PORT = int(os.getenv("PORT", "8000"))
 
-# Initialize ChromaDB for Vector Search
-chroma_client = chromadb.PersistentClient(path="/home/yojimbo256/Yuna-AI/chroma_db")
-collection = chroma_client.get_or_create_collection("yuna_knowledge")
+# === ✅ Request Models ===
+class ChatRequest(BaseModel):
+    message: str
 
-import os
-
-# WSL File Storage Path (Inside the Ubuntu Subsystem)
-WSL_STORAGE_PATH = "/home/yojimbo256/Yuna-AI/data"  # Adjust if needed
-
-# Define Paths for Short-Term Memory & Database
-SHORT_TERM_MEMORY_PATH = os.path.join(WSL_STORAGE_PATH, "short_term_memory.json")
-LONG_TERM_MEMORY_DB = os.path.join(WSL_STORAGE_PATH, "long_term_memory.db")
-
-# Ensure storage directory exists
-os.makedirs(WSL_STORAGE_PATH, exist_ok=True)
-
-# Ensure JSON File Exists for Short-Term Memory
-def ensure_json_file_exists(path, default_content):
-    if not os.path.exists(path):
-        with open(path, "w") as f:
-            json.dump(default_content, f, indent=4)
-
-ensure_json_file_exists(SHORT_TERM_MEMORY_PATH, {})
-os.makedirs(WSL_STORAGE_PATH, exist_ok=True)
-
-# SQLite for Long-Term Memory
-def init_long_term_memory():
-    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS memories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            content TEXT,
-            category TEXT,
-            summary TEXT,
-            permanent INTEGER DEFAULT 0
-        )
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_category ON memories(category)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON memories(timestamp)")
-    conn.commit()
-    conn.close()
-
-init_long_term_memory()
-
-# Request Models
-class MemoryUpdateRequest(BaseModel):
-    new_memory: str
-    category: str
-    permanent: bool = False
-
-# Async File Handling
-async def read_json(file_path):
-    """Read JSON file asynchronously, handling errors."""
+# === ✅ AI Response Generation ===
+def generate_response(user_message: str) -> str:
+    """Generate AI response locally or via Ollama."""
     try:
-        if os.path.exists(file_path):
-            return await asyncio.to_thread(lambda: json.load(open(file_path, "r")))
-        return {}
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {}
+        response = subprocess.run(
+            ["ollama", "run", "mistral"],
+            input=user_message,
+            text=True,
+            capture_output=True
+        )
+        return response.stdout.strip()
+    except Exception as e:
+        return f"Error generating response: {str(e)}"
 
-async def write_json(file_path, data):
-    await asyncio.to_thread(lambda: json.dump(data, open(file_path, "w"), indent=4))
+# === ✅ Chat Endpoint (Saves to SQLite) ===
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    user_message = request.message
+    ai_response = generate_response(user_message)
 
-# Generate Memory Summary
-def generate_summary(memories):
-    """Summarizes a list of memories before deletion."""
-    return " ".join(mem["content"] for mem in memories[-5:]) if memories else ""
+    # Store conversation in SQLite
+    store_conversation(user_message, ai_response)
 
-# Memory Management
-@app.post("/update_yuna_memory")
-async def save_memory_update(request: MemoryUpdateRequest):
-    existing_memory = await read_json(SHORT_TERM_MEMORY_PATH)
-    
-    if request.category not in existing_memory:
-        existing_memory[request.category] = []
-    
-    new_entry = {
-        "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        "content": request.new_memory
-    }
-    existing_memory[request.category].append(new_entry)
-    await write_json(SHORT_TERM_MEMORY_PATH, existing_memory)
-    
-    # Save to Long-Term Memory if marked permanent
-    if request.permanent:
-        conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO memories (timestamp, content, category, permanent) VALUES (?, ?, ?, 1)",
-                       (new_entry["timestamp"], request.new_memory, request.category))
-        conn.commit()
-        conn.close()
-    
-    return {"message": "Memory updated successfully."}
+    return {"response": ai_response}
 
-@app.get("/fetch_yuna_memory")
-async def get_yuna_memory(category: str = Query(None)):
-    short_term_memory = await read_json(SHORT_TERM_MEMORY_PATH)
-    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
-    cursor = conn.cursor()
-    
-    # ✅ Fetch long-term memory from SQLite
-    if category:
-        cursor.execute("SELECT timestamp, content FROM memories WHERE category = ?", (category,))
-        long_term_memory = cursor.fetchall()
-    else:
-        cursor.execute("SELECT timestamp, content FROM memories")
-        long_term_memory = cursor.fetchall()
-    
-    conn.close()
+# === ✅ Fetch Chat History ===
+@app.get("/history")
+async def get_history(limit: int = 10):
+    return {"conversations": get_recent_conversations(limit)}
 
-    return {
-        "short_term": short_term_memory.get(category, []),
-        "long_term": [{"timestamp": row[0], "content": row[1]} for row in long_term_memory]
-    }
-
-
-# Memory Cleanup
+# === ✅ Delete Old Conversations ===
 @app.post("/delete_old_memories")
-async def delete_old_memories(days: int = 30):
-    cutoff = datetime.now() - timedelta(days=days)
-    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, content, category FROM memories WHERE timestamp < ? AND permanent = 0", (cutoff.strftime('%Y-%m-%d %H:%M:%S'),))
-    old_memories = cursor.fetchall()
-    
-    if old_memories:
-        summary = generate_summary([{"content": mem[1]} for mem in old_memories])
-        cursor.execute("INSERT INTO memories (timestamp, content, category, permanent) VALUES (?, ?, ?, 1)",
-                       (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), summary, "summary"))
-    
-    cursor.execute("DELETE FROM memories WHERE timestamp < ? AND permanent = 0", (cutoff.strftime('%Y-%m-%d %H:%M:%S'),))
-    conn.commit()
-    conn.close()
-    return {"message": f"Deleted non-permanent memories older than {days} days."}
+async def delete_memories(days: int = 30):
+    delete_old_conversations(keep_latest=100)  # Keep the latest 100 messages
+    return {"message": f"Deleted non-permanent conversations older than {days} days."}
 
-# Fuzzy Search
-@app.get("/search_yuna_memory")
-async def search_yuna_memory(query: str):
-    conn = sqlite3.connect(LONG_TERM_MEMORY_DB)
-    cursor = conn.cursor()
-    cursor.execute("SELECT timestamp, content FROM memories")
-    all_memories = cursor.fetchall()
-    conn.close()
-    
-    results = [mem for mem in all_memories if fuzz.partial_ratio(query, mem[1]) > 70]
+# === ✅ Fuzzy Memory Search ===
+@app.get("/search_memory")
+async def search_memory(query: str):
+    memories = get_recent_conversations(50)  # Search within the last 50 messages
+    results = [mem for mem in memories if fuzz.partial_ratio(query, mem["user"]) > 70]
     return {"matches": results}
 
-@app.post("/chat")
-async def chat(request: Request):
-    data = await request.json()
-    user_message = data.get("message")
-
-    # Run local LLM using Ollama
-    response = subprocess.run(
-        ["ollama", "run", "mistral"],
-        input=user_message,
-        text=True,
-        capture_output=True
-    )
-
-    return {"response": response.stdout}
-
-# Start FastAPI Server
+# === ✅ Start FastAPI Server ===
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=PORT)

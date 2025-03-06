@@ -35,14 +35,19 @@ def store_conversation(user_message: str, ai_response: str):
     conn.commit()
     conn.close()
 
-def get_recent_conversations(limit: int = 10) -> List[Dict[str, str]]:
-    """Retrieves the most recent conversations from SQLite."""
+def get_recent_conversations(limit: int = 10):
+    """Retrieves recent conversations and prioritizes high-value interactions."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT user_message, ai_response, timestamp FROM conversations ORDER BY timestamp DESC LIMIT ?",
-        (limit,)
-    )
+
+    # Prioritize long-term memory with weighted selection
+    cursor.execute("""
+        SELECT user_message, ai_response, timestamp 
+        FROM conversations 
+        ORDER BY (CASE WHEN LENGTH(user_message) > 50 THEN 1 ELSE 0 END) DESC, timestamp DESC
+        LIMIT ?
+    """, (limit,))
+    
     data = cursor.fetchall()
     conn.close()
     return [{"user": row["user_message"], "yuna": row["ai_response"], "timestamp": row["timestamp"]} for row in data]

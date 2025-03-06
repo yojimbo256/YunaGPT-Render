@@ -5,12 +5,10 @@ import sqlite3
 from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 import subprocess
-
 from fastapi import FastAPI, Query, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from rapidfuzz import fuzz
-
 from memory import store_conversation, get_recent_conversations, delete_old_conversations
 
 # === ✅ FastAPI App Initialization ===
@@ -39,17 +37,15 @@ class ChatRequest(BaseModel):
 
 # === ✅ AI Response Generation ===
 def generate_response(user_message: str) -> str:
-    """Generate AI response locally or via Ollama."""
-    try:
-        response = subprocess.run(
-            ["ollama", "run", "mistral"],
-            input=user_message,
-            text=True,
-            capture_output=True
-        )
-        return response.stdout.strip()
-    except Exception as e:
-        return f"Error generating response: {str(e)}"
+    """Generate AI response with memory awareness."""
+    personality = "I am Yuna, your AI assistant. I assist with insights, memory recall, and intelligent discussions."
+    
+    # Fetch past conversations for context
+    memory = get_recent_conversations(limit=3)
+    context = "\n".join([f"{m['user']}: {m['yuna']}" for m in memory])
+
+    response = f"{personality}\n\nRecent context:\n{context}\n\nUser: {user_message}\nYuna:"
+    return response
 
 # === ✅ Chat Endpoint (Saves to SQLite) ===
 @app.post("/chat")
@@ -57,7 +53,7 @@ async def chat(request: ChatRequest):
     user_message = request.message
     ai_response = generate_response(user_message)
 
-    # Store conversation in SQLite
+    # Store the conversation in SQLite
     store_conversation(user_message, ai_response)
 
     return {"response": ai_response}

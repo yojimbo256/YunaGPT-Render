@@ -12,3 +12,4 @@ torch
 transformers
 tqdm
 loguru
+rapidfuzz==3.5.2

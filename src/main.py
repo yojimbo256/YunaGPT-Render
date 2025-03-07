@@ -20,10 +20,10 @@ app = FastAPI(lifespan=lifespan)
 # === ✅ Updated CORS Middleware ===
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://yuna-web.vercel.app"],  # Restrict to trusted frontend
+    allow_origins=["*"],  # Allow all origins (update this later for security)
     allow_credentials=True,
-    allow_methods=["OPTIONS", "GET", "POST"],
-    allow_headers=["*"]
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # === ✅ Environment Variables ===

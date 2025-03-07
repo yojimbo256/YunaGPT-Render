@@ -1,97 +1,113 @@
-# Yuna AI Assistant
+## **Yuna AI – Personal Cognitive Assistant**  
+**Version:** 1.0.0  
+📅 **Last Updated:** March 7, 2025  
 
-## Overview
-Yuna is an AI-powered personal assistant designed to help manage files, tasks, and memories efficiently using **SQLite, ChromaDB, and OpenAI**. It automates note-taking, project tracking, and scheduled summaries while allowing easy recall of past interactions.
+---
 
-## Features
+### **🧠 What is Yuna AI?**  
+Yuna AI is a **personal cognitive assistant** designed to provide:  
+✅ **Long-term memory recall** (persistent storage)  
+✅ **Conversational AI capabilities** (via LLM)  
+✅ **Secure HTTPS communication**  
+✅ **FastAPI backend** with SQLite memory storage  
+✅ **Modern web UI** (Next.js frontend)
 
-### 🗂 **File & Memory Management**
-- **Fetch Latest Memories:** Retrieve the most recent stored memories.
-  ```sh
-  curl "http://127.0.0.1:8000/fetch_yuna_memory"
-  ```
-- **Store a New Memory Entry:**
-  ```sh
-  curl -X POST "http://127.0.0.1:8000/update_yuna_memory" \
-       -H "Content-Type: application/json" \
-       -d '{"new_memory": "Meeting notes", "category": "work", "permanent": true}'
-  ```
-- **Search Memory Using Fuzzy Matching:**
-  ```sh
-  curl "http://127.0.0.1:8000/search_yuna_memory?query=project"
-  ```
-- **Delete Old Non-Permanent Memories:**
-  ```sh
-  curl -X POST "http://127.0.0.1:8000/delete_old_memories" \
-       -H "Content-Type: application/json" \
-       -d '{"days": 30}'
-  ```
+---
 
-### 📋 **Task Management**
-- **Check Stored Tasks:**
-  ```sh
-  curl "http://127.0.0.1:8000/fetch_tasks"
-  ```
-- **Add a Task:**
-  ```sh
-  curl -X POST "http://127.0.0.1:8000/add_task" \
-       -H "Content-Type: application/json" \
-       -d '{"task": "Finish Yuna documentation", "priority": "high", "due_date": "2025-03-01"}'
-  ```
-- **Update Task Status:**
-  ```sh
-  curl -X POST "http://127.0.0.1:8000/update_task_status" \
-       -H "Content-Type: application/json" \
-       -d '{"index": 0, "new_status": "completed"}'
-  ```
-
-### 📊 **Reports & Summaries**
-- **Generate a Daily Report:**
-  ```sh
-  curl -X POST "http://127.0.0.1:8000/generate_scheduled_summary"
-  ```
-- **Retrieve Logs:**
-  ```sh
-  curl "http://127.0.0.1:8000/logs"
-  ```
-
-### 🛠 **Automated Workflows & Background Automation**
-- **Automate Workflow with Startup Script**
-  - Set up Yuna to start automatically using login items:
-    ```sh
-    chmod +x ~/start_yuna.sh
-    ```
-  - Add `~/start_yuna.sh` to macOS login items.
-
-## Installation & Setup
-### 🚀 **Running Yuna Locally**
-1. **Clone the Repository**
-   ```sh
-   git clone https://github.com/yojimbo256/Yuna-AI.git
-   cd Yuna-AI
-   ```
-2. **Install Dependencies**
-   ```sh
-   pip install -r requirements.txt
-   ```
-3. **Run the API Server**
-   ```sh
-   uvicorn yuna:app --host 0.0.0.0 --port 8000
-   ```
-
-### 🛠 **Environment Variables**
-Set the following environment variables:
+## **📂 Project Structure**
 ```
-OPENAI_API_KEY=<your_openai_api_key>
-GITHUB_ACCESS_TOKEN=<your_github_token>
-PORT=8000
+Yuna-AI/
+│
+├── src/              # Backend API & Core Logic
+│   ├── main.py       # FastAPI application entry point
+│   ├── memory.py     # Memory storage & retrieval system
+│   ├── database/     # Database interactions
+│   ├── models/       # AI models & processing
+│   ├── utils/        # Utility functions
+│   └── api/          # API endpoints
+│
+├── frontend/         # Next.js Web Interface (Chat UI)
+│
+├── data/             # Stored data & logs
+│   ├── database/     # SQLite memory storage
+│   ├── yuna_log.txt  # Debug logs
+│   ├── yuna_memory.json  # Cached memory
+│   ├── yuna_tasks.json   # Task tracking
+│
+├── scripts/          # Automation & server scripts
+│   ├── run_server.sh
+│   ├── generate_ssl.sh
+│   ├── migrate_db.py
+│   ├── init_db.py
+│
+├── tests/            # Unit tests
+│   ├── test_api.py
+│   ├── test_chat.py
+│   ├── test_memory.py
+│
+├── config/           # Configuration files
+│   ├── config.ini
+│   ├── requirements.txt
+│
+├── README.md         # Project documentation
+└── LICENSE           # License information
 ```
 
-## Roadmap 🚀
-- [ ] Improve auto-start mechanism.
-- [ ] Enhance memory summarization before deletion.
-- [ ] Implement SQLite query optimization for faster recall.
-- [ ] Add voice command support.
+---
 
-## License 📜
-MIT License. See `LICENSE` for more details.
+## **🚀 Getting Started**
+### **1️⃣ Install Dependencies**
+```bash
+cd ~/Desktop/Yuna-AI
+python3 -m venv venv
+source venv/bin/activate
+pip install -r config/requirements.txt
+```
+
+### **2️⃣ Start the Backend (FastAPI)**
+```bash
+uvicorn src.main:app --host 0.0.0.0 --port 8000 \
+    --ssl-keyfile /home/yojimbo256/server.key \
+    --ssl-certfile /home/yojimbo256/server.crt --reload
+```
+
+### **3️⃣ Start the Frontend (Next.js)**
+```bash
+cd frontend/yuna-web
+npm install
+npm run dev
+```
+🔗 Open the browser: **https://localhost:3000**
+
+---
+
+## **🔍 Features & Capabilities**
+✅ **Secure HTTPS API** (self-signed SSL)  
+✅ **FastAPI Backend** with SQLite memory storage  
+✅ **Persistent Memory** via `long_term_memory.db`  
+✅ **Fuzzy Search** (search past conversations)  
+✅ **Multi-step Reasoning** (task breakdowns)  
+✅ **Local & Cloud AI Execution** (scalable)  
+
+---
+
+## **💡 How to Use**
+1. **Chat with Yuna** via the **web UI** at `https://localhost:3000`.  
+2. Yuna **remembers conversations** and recalls relevant context.  
+3. Use `/history` API to **retrieve past interactions**.  
+4. Use `/chat` API to **send and receive AI responses**.  
+
+---
+
+## **🛠️ Contributing**
+We welcome contributions!  
+- **Fork the repo** and create a new branch.  
+- **Submit a PR** for review.  
+- **Report bugs** via GitHub issues.  
+
+---
+
+## **📜 License**
+Yuna AI is **open-source software** licensed under the **MIT License**.  
+
+---

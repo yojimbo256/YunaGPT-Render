@@ -2,92 +2,57 @@ import sqlite3
 from datetime import datetime, timedelta
 from rapidfuzz import fuzz
 
-# === ✅ Database Connection (Context Manager) ===
-def get_db_connection():
-    """Create and return a database connection."""
-    conn = sqlite3.connect("yuna_memory.db")
-    conn.row_factory = sqlite3.Row
-    return conn
+DB_PATH = "data/database/yuna_memory.db"
 
-# === ✅ Initialize Memory Table ===
-def init_memory_db():
-    """Ensure the conversations table exists with correct columns."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS conversations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_message TEXT,
-                ai_response TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
+# === ✅ Initialize SQLite Database
+def init_db():
+    """Ensure the database schema is correct."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_message TEXT,
+            ai_response TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
-        conn.commit()
+    """)
+    conn.commit()
+    conn.close()
 
-# === ✅ Store Conversation in Memory (With Summarization) ===
+init_db()
+
+# === ✅ Store Conversations
 def store_conversation(user_message: str, ai_response: str):
-    """Store a new user message and AI response, summarizing if needed."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        # Summarize if response is too long
-        if len(ai_response) > 500:
-            ai_response = ai_response[:500] + "... (truncated)"
-        
-        cursor.execute(
-            "INSERT INTO conversations (user_message, ai_response) VALUES (?, ?)",
-            (user_message, ai_response),
-        )
-        conn.commit()
+    """Save user-AI conversation to SQLite."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO conversations (user_message, ai_response) VALUES (?, ?)", (user_message, ai_response))
+    conn.commit()
+    conn.close()
 
-# === ✅ Retrieve Recent Conversations (Prioritizing User Input Length) ===
+# === ✅ Fetch Recent Conversations
 def get_recent_conversations(limit: int = 10):
-    """Retrieve the last N conversations, prioritizing longer user inputs."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """SELECT user_message, ai_response, timestamp FROM conversations
-            ORDER BY LENGTH(user_message) DESC, timestamp DESC LIMIT ?""",
-            (limit,)
-        )
-        return [dict(row) for row in cursor.fetchall()]
+    """Retrieve the latest N user-AI interactions from memory."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_message, ai_response, timestamp FROM conversations ORDER BY timestamp DESC LIMIT ?", (limit,))
+    conversations = [{"user_message": row[0], "ai_response": row[1], "timestamp": row[2]} for row in cursor.fetchall()]
+    conn.close()
+    return conversations
 
-# === ✅ Delete Old Conversations (Keep Latest N Entries) ===
+# === ✅ Delete Old Conversations
 def delete_old_conversations(keep_latest: int = 100):
-    """Deletes older records but keeps the latest N conversations."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            DELETE FROM conversations 
-            WHERE id NOT IN (
-            SELECT id FROM conversations 
-            ORDER BY timestamp DESC 
-            LIMIT ?
-        )
-        """,
-        (keep_latest,)
-        )
+    """Delete old conversations but keep the latest N records."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM conversations")
+    count = cursor.fetchone()[0]
+
+    if count > keep_latest:
+        excess = count - keep_latest
+        cursor.execute("DELETE FROM conversations WHERE id IN (SELECT id FROM conversations ORDER BY timestamp ASC LIMIT ?)", (excess,))
         conn.commit()
-
-# === ✅ Fuzzy Search in Memory ===
-def search_conversation(query: str, limit: int = 5):
-    """Search past conversations using fuzzy matching."""
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT user_message, ai_response, timestamp FROM conversations")
-        all_conversations = cursor.fetchall()
-        
-        # Filter by similarity threshold (70% match)
-        results = [
-            dict(row)
-            for row in all_conversations
-            if fuzz.partial_ratio(query, row["user_message"]) > 70
-        ][:limit]
-        
-        return results
-
-# === ✅ Initialize DB on Import ===
-init_memory_db()
+    
+    conn.close()

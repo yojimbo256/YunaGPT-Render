@@ -1,7 +1,12 @@
 from flask import Flask, render_template, request, jsonify
-from src.memory import store_conversation, get_recent_conversations
+from memory import store_conversation, get_recent_conversations
+import openai  # Replace this with your AI model integration
 
 app = Flask(__name__)
+
+# Configure OpenAI API Key (Replace with actual API key)
+OPENAI_API_KEY = "your_openai_api_key_here"
+openai.api_key = OPENAI_API_KEY
 
 @app.route('/')
 def index():
@@ -15,8 +20,17 @@ def chat():
     if not user_message:
         return jsonify({"response": "Please enter a message."})
 
-    # Simulate a simple response (Replace with AI model later)
-    ai_response = f"Yuna: {user_message[::-1]}"  # Reverse text as a placeholder response
+    # Generate AI response using OpenAI (or another AI model)
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Replace with the appropriate model
+            messages=[{"role": "system", "content": "You are Yuna, a helpful AI assistant."},
+                      {"role": "user", "content": user_message}]
+        )
+        ai_response = response["choices"][0]["message"]["content"]
+    except Exception as e:
+        ai_response = "Sorry, I encountered an error generating a response."
+        print(f"AI Error: {e}")
     
     # Store conversation in memory
     store_conversation(user_message, ai_response)

@@ -1,6 +1,9 @@
 ## **Yuna AI – Personal Cognitive Assistant**  
-**Version:** 1.0.0  
-📅 **Last Updated:** March 7, 2025  
+**Version**: 1.0.0  
+📅 **Last Updated**: March 7, 2025  
+
+### **🎓 Yuna AI – A PhD Research Project in Systems Engineering**
+Yuna AI is part of a **PhD research project** in **Systems Engineering** focused on developing a **personalized cognitive assistant** that adapts and evolves with the user’s needs. This research involves the application of **reinforcement learning (RL)**, **transformer-based architectures (TA)**, and **advanced memory management techniques** (PCM/SSAM) to create an **adaptive AI** system capable of long-term task management, goal tracking, and strategic decision-making.
 
 ---
 
@@ -9,8 +12,12 @@ Yuna AI is a **personal cognitive assistant** designed to provide:
 ✅ **Long-term memory recall** (persistent storage)  
 ✅ **Conversational AI capabilities** (via LLM)  
 ✅ **Secure HTTPS communication**  
-✅ **FastAPI backend** with SQLite memory storage  
-✅ **Modern web UI** (Next.js frontend)
+✅ **Flask backend** with SQLite memory storage  
+✅ **AI model powered by Mistral 7B** for personalized interactions  
+✅ **Hybrid AI execution** with local & cloud processing  
+✅ **Real-time memory management** using PCM/SSAM  
+✅ **Contextual reasoning** and **task management**  
+✅ **Scalable infrastructure** with potential for cloud offloading  
 
 ---
 
@@ -19,14 +26,12 @@ Yuna AI is a **personal cognitive assistant** designed to provide:
 Yuna-AI/
 │
 ├── src/              # Backend API & Core Logic
-│   ├── main.py       # FastAPI application entry point
+│   ├── main.py       # Flask application entry point
 │   ├── memory.py     # Memory storage & retrieval system
 │   ├── database/     # Database interactions
-│   ├── models/       # AI models & processing
+│   ├── models/       # AI models & processing (Mistral 7B)
 │   ├── utils/        # Utility functions
 │   └── api/          # API endpoints
-│
-├── frontend/         # Next.js Web Interface (Chat UI)
 │
 ├── data/             # Stored data & logs
 │   ├── database/     # SQLite memory storage
@@ -64,14 +69,12 @@ source venv/bin/activate
 pip install -r config/requirements.txt
 ```
 
-### **2️⃣ Start the Backend (FastAPI)**
+### **2️⃣ Start the Backend (Flask)**
 ```bash
-uvicorn src.main:app --host 0.0.0.0 --port 8000 \
-    --ssl-keyfile /home/yojimbo256/server.key \
-    --ssl-certfile /home/yojimbo256/server.crt --reload
+python3 src/main.py
 ```
 
-### **3️⃣ Start the Frontend (Next.js)**
+### **3️⃣ Start the Frontend (React/Next.js)** *(if needed)*
 ```bash
 cd frontend/yuna-web
 npm install
@@ -83,17 +86,19 @@ npm run dev
 
 ## **🔍 Features & Capabilities**
 ✅ **Secure HTTPS API** (self-signed SSL)  
-✅ **FastAPI Backend** with SQLite memory storage  
+✅ **Flask Backend** with SQLite memory storage  
 ✅ **Persistent Memory** via `long_term_memory.db`  
 ✅ **Fuzzy Search** (search past conversations)  
 ✅ **Multi-step Reasoning** (task breakdowns)  
-✅ **Local & Cloud AI Execution** (scalable)  
+✅ **Local & Cloud AI Execution** (scalable, using Mistral 7B)  
+✅ **Contextual Reasoning** and **Adaptive Task Management**  
+✅ **Memory System** (PCM/SSAM for long-term recall)  
 
 ---
 
 ## **💡 How to Use**
 1. **Chat with Yuna** via the **web UI** at `https://localhost:3000`.  
-2. Yuna **remembers conversations** and recalls relevant context.  
+2. **Yuna remembers conversations** and recalls relevant context for future interactions.  
 3. Use `/history` API to **retrieve past interactions**.  
 4. Use `/chat` API to **send and receive AI responses**.  
 
